@@ -12,6 +12,7 @@ import '../models/timer_value.dart';
 import 'sync_service.dart';
 import 'identity_service.dart';
 import 'google_calendar_service.dart';
+import 'notification_service.dart';
 
 const _uuid = Uuid();
 
@@ -627,10 +628,35 @@ class SupabaseService {
           final updatedEntry = e.withValue(timerCol.id, completed.toJson());
           final withStatus = updatedEntry.withValue(statusCol.id, 'done');
           await upsertEntry(withStatus);
+          // notify: timer done
+          final task = _tasks.where((t) => t.id == e.taskId).firstOrNull;
+          await NotificationService.instance.showTimerDone(task?.name.isEmpty == true ? 'Task' : (task?.name ?? 'Task'));
+          // also send next tasks for the day after a short delay
+          Future.delayed(const Duration(seconds: 2), () async {
+            final nextEntries = _entries.where((en) => en.checked && en.date.year == now.year && en.date.month == now.month && en.date.day == now.day && en.taskId != e.taskId).take(3).toList();
+            if (nextEntries.isNotEmpty) {
+              final names = nextEntries.map((en) {
+                final t = _tasks.where((tt) => tt.id == en.taskId).firstOrNull;
+                return t?.name.isEmpty == true ? 'Untitled' : (t?.name ?? 'Task');
+              }).join(', ');
+              await NotificationService.instance.showNextTasks('Next: $names');
+            }
+          });
         } else if (tv.running) {
           final curStatus = e.data[statusCol.id] as String?;
           if (curStatus != 'in_progress') {
             await upsertEntry(e.withValue(statusCol.id, 'in_progress'));
+          }
+          // schedule reminder if enabled (only once per start)
+          final settings = await NotificationService.instance.getSettings();
+          if (settings.enabled && settings.timerReminder) {
+            final remaining = tv.durationSec - tv.effectiveElapsed(now);
+            final mins = settings.reminderMinutes;
+            if (remaining > mins * 60 && remaining < tv.durationSec) {
+              final task = _tasks.where((t) => t.id == e.taskId).firstOrNull;
+              final total = Duration(seconds: tv.durationSec);
+              unawaited(NotificationService.instance.scheduleTimerReminder(taskName: task?.name ?? 'Task', total: total, minutesBefore: mins));
+            }
           }
         }
       }

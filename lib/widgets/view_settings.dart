@@ -4,6 +4,7 @@ import '../config/app_colors.dart';
 import '../providers/display_prefs.dart';
 import '../services/google_calendar_service.dart';
 import 'column_visibility_bar.dart';
+import 'notification_settings.dart';
 
 class ViewSettingsButton extends ConsumerWidget {
   const ViewSettingsButton({super.key});
@@ -67,6 +68,10 @@ class _DensityDialog extends ConsumerWidget {
             const ColumnVisibilitySection(),
             const SizedBox(height: 12),
             Container(padding: const EdgeInsets.all(8), decoration: BoxDecoration(color: AppColors.inputFill, borderRadius: BorderRadius.circular(8), border: Border.all(color: AppColors.border)), child: const Text('Column visibility is saved per user. Hide schedule/time/status/note to focus the table — e.g., show only status or only time.', style: TextStyle(fontSize: 11, color: AppColors.textSecondary))),
+            const SizedBox(height: 16),
+            const Divider(color: AppColors.border, height: 1),
+            const SizedBox(height: 12),
+            const NotificationSettingsSection(),
             const SizedBox(height: 16),
             const Divider(color: AppColors.border, height: 1),
             const SizedBox(height: 12),
