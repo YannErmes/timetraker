@@ -1,0 +1,7 @@
+{
+  "installCommand": "curl -L https://storage.googleapis.com/flutter_infra_release/releases/stable/linux/flutter_linux_3.24.5-stable.tar.xz | tar -xJ && export PATH=\"$PWD/flutter/bin:$PATH\" && flutter --version",
+  "buildCommand": "export PATH=\"$PWD/flutter/bin:$PATH\" && flutter build web --dart-define SUPABASE_URL=$SUPABASE_URL --dart-define SUPABASE_ANON_KEY=$SUPABASE_ANON_KEY --dart-define GOOGLE_CLIENT_ID=$GOOGLE_CLIENT_ID",
+  "outputDirectory": "build/web",
+  "framework": null,
+  "rewrites": [{ "source": "/(.*)", "destination": "/index.html" }]
+}
