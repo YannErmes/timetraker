@@ -11,6 +11,7 @@ import '../models/enums.dart';
 import '../models/timer_value.dart';
 import 'sync_service.dart';
 import 'identity_service.dart';
+import 'google_calendar_service.dart';
 
 const _uuid = Uuid();
 
@@ -529,11 +530,25 @@ class SupabaseService {
     }
     _entriesCtrl.add(_entries);
     await _persistCache();
+    // auto-sync to Google Calendar if enabled (fire-and-forget, never blocks Supabase write)
+    unawaited(_maybeSyncToGoogle(entry));
     if (!isConfigured) return;
     try {
       await _client!.from('day_entries').upsert(entry.toSupabase());
     } catch (e) {
       await _cache.enqueue(PendingMutation(id: _uuid.v4(), table: 'day_entries', op: 'upsert', payload: entry.toSupabase(), createdAt: DateTime.now()));
+    }
+  }
+
+  Future<void> _maybeSyncToGoogle(DayEntry entry) async {
+    try {
+      if (!await GoogleCalendarService.instance.isAutoSyncEnabled()) return;
+      if (!await GoogleCalendarService.instance.isConnected()) return;
+      final task = _tasks.where((t) => t.id == entry.taskId).firstOrNull;
+      if (task == null) return;
+      await GoogleCalendarService.instance.syncDay(task, entry);
+    } catch (e) {
+      debugPrint('Google auto-sync failed (will retry on next change): $e');
     }
   }
 

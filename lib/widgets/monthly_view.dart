@@ -5,6 +5,7 @@ import '../providers/app_providers.dart';
 import '../providers/task_filters.dart';
 import '../utils/date_utils.dart';
 import '../models/enums.dart';
+import '../services/google_calendar_service.dart';
 import 'day_detail_panel.dart';
 import 'cells/cell_widgets.dart';
 import 'cells/timer_cell.dart';
@@ -34,7 +35,21 @@ class MonthlyView extends ConsumerWidget {
             IconButton(icon: const Icon(Icons.chevron_right, color: AppColors.textSecondary), onPressed: () => ref.read(selectedDateProvider.notifier).state = DateTime(anchor.year, anchor.month + 1, 1)),
             const Spacer(),
             OutlinedButton(onPressed: () => ref.read(selectedDateProvider.notifier).state = DateTime.now(), child: const Text('Today')),
-            const SizedBox(width: 8),
+            const SizedBox(width: 4),
+            IconButton(
+              icon: const Icon(Icons.sync_rounded, size: 18, color: AppColors.textSecondary),
+              tooltip: 'Sync monthly to Google',
+              onPressed: () async {
+                try {
+                  final svc = ref.read(supabaseServiceProvider);
+                  final count = await GoogleCalendarService.instance.syncMonth(anchor, svc.tasks, svc.entries);
+                  if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Synced $count events to Google Calendar'), backgroundColor: AppColors.surface));
+                } catch (e) {
+                  if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Sync failed: $e. Connect Google first in View Settings (tune icon).')));
+                }
+              },
+            ),
+            const SizedBox(width: 4),
             FilledButton.icon(icon: const Icon(Icons.add, size: 16), label: const Text('Add task'), onPressed: () => _showAddTaskDialog(context, ref, anchor)),
           ]),
         ),
