@@ -35,5 +35,6 @@ final entriesProvider = StreamProvider((ref) {
 // View state
 final selectedDateProvider = StateProvider<DateTime>((ref) => DateTime.now());
 final viewModeProvider = StateProvider<ViewMode>((ref) => ViewMode.weekly);
+final isFilterSidebarCollapsedProvider = StateProvider<bool>((ref) => false);
 
 enum ViewMode { weekly, daily, monthly }

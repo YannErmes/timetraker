@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../config/app_colors.dart';
 import '../providers/app_providers.dart';
 import '../providers/column_visibility.dart';
+import '../providers/task_filters.dart';
 import '../models/enums.dart';
 import 'cells/cell_widgets.dart';
 import 'cells/timer_cell.dart';
@@ -15,32 +16,79 @@ class AndroidChecklist extends ConsumerWidget {
     ref.watch(tasksProvider);
     ref.watch(columnsProvider);
     ref.watch(entriesProvider);
+    final filters = ref.watch(taskFiltersProvider);
     final allCols = List.of(svc.columns)..sort((a, b) => a.position.compareTo(b.position));
     final hidden = ref.watch(columnVisibilityProvider);
     final cols = allCols.where((c) => !hidden.contains(c.id)).toList();
-    final tasks = List.of(svc.tasks)..sort((a, b) => a.position.compareTo(b.position));
+    final allTasks = List.of(svc.tasks)..sort((a, b) => a.position.compareTo(b.position));
+    // Apply same filters as web (search/status/tag/hasNote) for phone
+    final tasks = allTasks.where((t) {
+      if (filters.search.isNotEmpty && !t.name.toLowerCase().contains(filters.search.toLowerCase())) return false;
+      if (filters.status != null) {
+        final statusCol = allCols.where((c) => c.type == ColumnType.status).firstOrNull;
+        if (statusCol == null) return false;
+        final hasStatus = svc.entries.any((e) => e.taskId == t.id && e.data[statusCol.id] == filters.status);
+        if (!hasStatus) return false;
+      }
+      if (filters.hasNoteOnly) {
+        final noteCol = allCols.where((c) => c.id == 'col_note').firstOrNull;
+        if (noteCol == null) return false;
+        final hasNote = svc.entries.any((e) => e.taskId == t.id && (e.data[noteCol.id] as String?)?.trim().isNotEmpty == true);
+        if (!hasNote) return false;
+      }
+      if (filters.tag != null) {
+        final hasTag = svc.entries.any((e) => e.taskId == t.id && e.data.values.any((v) => v is List && (v as List).contains(filters.tag)));
+        if (!hasTag) return false;
+      }
+      return true;
+    }).toList();
     final date = ref.watch(selectedDateProvider);
+    final isSmall = MediaQuery.of(context).size.width < 380;
     return Container(
       color: AppColors.bg,
       child: ListView(
-        padding: const EdgeInsets.only(bottom: 24),
+        padding: EdgeInsets.only(bottom: 24, left: isSmall ? 8 : 0, right: isSmall ? 8 : 0),
         children: [
           Container(
             color: AppColors.header,
-            padding: const EdgeInsets.all(16),
-            child: Row(children: [
-              const Text('Today', style: TextStyle(color: AppColors.textPrimary, fontWeight: FontWeight.w700, fontSize: 16)),
-              const Spacer(),
-              Text('${date.month}/${date.day}/${date.year}', style: const TextStyle(color: AppColors.textSecondary, fontSize: 13)),
-              const SizedBox(width: 8),
-              IconButton(
-                icon: const Icon(Icons.calendar_today, size: 18, color: AppColors.textSecondary),
-                style: IconButton.styleFrom(backgroundColor: AppColors.inputFill, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8), side: const BorderSide(color: AppColors.border))),
-                onPressed: () async {
-                  final d = await showDatePicker(context: context, initialDate: date, firstDate: DateTime(2020), lastDate: DateTime(2035));
-                  if (d != null) ref.read(selectedDateProvider.notifier).state = d;
-                },
-              )
+            padding: EdgeInsets.all(isSmall ? 12 : 16),
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Row(children: [
+                const Icon(Icons.checklist_rounded, size: 20, color: AppColors.accent),
+                const SizedBox(width: 8),
+                const Text('Today', style: TextStyle(color: AppColors.textPrimary, fontWeight: FontWeight.w700, fontSize: 18)),
+                const Spacer(),
+                Text('${date.month}/${date.day}/${date.year}', style: const TextStyle(color: AppColors.textSecondary, fontSize: 13)),
+                const SizedBox(width: 8),
+                IconButton(
+                  icon: const Icon(Icons.calendar_today, size: 18, color: AppColors.textSecondary),
+                  style: IconButton.styleFrom(backgroundColor: AppColors.inputFill, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8), side: const BorderSide(color: AppColors.border))),
+                  onPressed: () async {
+                    final d = await showDatePicker(context: context, initialDate: date, firstDate: DateTime(2020), lastDate: DateTime(2035));
+                    if (d != null) ref.read(selectedDateProvider.notifier).state = d;
+                  },
+                )
+              ]),
+              const SizedBox(height: 12),
+              // Search for phone - compact
+              TextField(
+                style: const TextStyle(color: AppColors.textPrimary, fontSize: 14),
+                decoration: InputDecoration(
+                  hintText: 'Search tasks…',
+                  hintStyle: const TextStyle(color: AppColors.textSecondary, fontSize: 13),
+                  prefixIcon: const Icon(Icons.search, size: 18, color: AppColors.textSecondary),
+                  isDense: true,
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                  filled: true,
+                  fillColor: AppColors.inputFill,
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: AppColors.border)),
+                ),
+                onChanged: (v) => ref.read(taskFiltersProvider.notifier).setSearch(v),
+              ),
+              if (tasks.length != allTasks.length) ...[
+                const SizedBox(height: 8),
+                Text('${tasks.length} of ${allTasks.length} tasks • tap filter icon for more', style: const TextStyle(fontSize: 11, color: AppColors.textSecondary)),
+              ],
             ]),
           ),
           const Divider(height: 1, color: AppColors.border),
@@ -61,15 +109,16 @@ class AndroidChecklist extends ConsumerWidget {
                     Expanded(child: Text(t.name.isEmpty ? 'Untitled' : t.name, style: const TextStyle(fontWeight: FontWeight.w600, color: AppColors.textPrimary))),
                   ]),
                   const Divider(color: AppColors.border, height: 16),
+                  // Responsive: on small phones, stack more compact
                   Wrap(
-                    spacing: 12,
-                    runSpacing: 8,
+                    spacing: 10,
+                    runSpacing: 10,
                     children: [
                       for (final col in cols)
                         SizedBox(
                           width: double.infinity,
-                          child: Row(children: [
-                            SizedBox(width: 80, child: Text(col.label, style: const TextStyle(fontSize: 12, color: AppColors.textSecondary, fontWeight: FontWeight.w600))),
+                          child: Row(crossAxisAlignment: CrossAxisAlignment.center, children: [
+                            SizedBox(width: isSmall ? 68 : 80, child: Text(col.label, style: TextStyle(fontSize: isSmall ? 11 : 12, color: AppColors.textSecondary, fontWeight: FontWeight.w600))),
                             Expanded(
                               child: Builder(builder: (_) {
                                 final e = svc.entryFor(t.id, date);

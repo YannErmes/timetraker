@@ -140,8 +140,28 @@ class HomeScreen extends ConsumerWidget {
       body: isMobile
           ? const AndroidChecklist()
           : Row(children: [
-              Container(width: 300, decoration: const BoxDecoration(border: Border(right: BorderSide(color: AppColors.border))), child: const FilterSidebarContent()),
-              const VerticalDivider(width: 1, thickness: 1, color: AppColors.border),
+              AnimatedContainer(
+                duration: const Duration(milliseconds: 250),
+                curve: Curves.easeInOut,
+                width: ref.watch(isFilterSidebarCollapsedProvider) ? 0 : 300,
+                clipBehavior: Clip.hardEdge,
+                decoration: const BoxDecoration(border: Border(right: BorderSide(color: AppColors.border))),
+                child: ref.watch(isFilterSidebarCollapsedProvider) ? const SizedBox.shrink() : const FilterSidebarContent(),
+              ),
+              InkWell(
+                onTap: () => ref.read(isFilterSidebarCollapsedProvider.notifier).state = !ref.read(isFilterSidebarCollapsedProvider),
+                child: Container(
+                  width: 12,
+                  color: AppColors.header,
+                  child: Center(
+                    child: Icon(
+                      ref.watch(isFilterSidebarCollapsedProvider) ? Icons.chevron_right_rounded : Icons.chevron_left_rounded,
+                      size: 14,
+                      color: AppColors.textSecondary,
+                    ),
+                  ),
+                ),
+              ),
               Expanded(child: _desktopBody(view)),
             ]),
       bottomNavigationBar: isMobile
