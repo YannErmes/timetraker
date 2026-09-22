@@ -8,8 +8,7 @@ import '../widgets/monthly_view.dart';
 import '../widgets/column_settings_panel.dart';
 import '../widgets/android_checklist.dart';
 import '../widgets/view_settings.dart';
-import '../widgets/task_filters_bar.dart';
-import '../widgets/column_visibility_bar.dart';
+import '../widgets/filter_sidebar.dart';
 
 class HomeScreen extends ConsumerWidget {
   const HomeScreen({super.key});
@@ -51,6 +50,14 @@ class HomeScreen extends ConsumerWidget {
             ),
             const SizedBox(width: 12),
           ],
+          if (isMobile)
+            IconButton(
+              icon: const Icon(Icons.filter_list_rounded, color: AppColors.textSecondary),
+              tooltip: 'Filters',
+              onPressed: () {
+                showModalBottomSheet(context: context, isScrollControlled: true, backgroundColor: Colors.transparent, builder: (_) => DraggableScrollableSheet(initialChildSize: 0.7, maxChildSize: 0.9, minChildSize: 0.4, builder: (_, c) => Container(decoration: const BoxDecoration(color: AppColors.surface, borderRadius: BorderRadius.vertical(top: Radius.circular(12))), child: const FilterSidebarContent(showClose: true))));
+              },
+            ),
           const ViewSettingsButton(),
           IconButton(icon: const Icon(Icons.view_column, color: AppColors.textSecondary), tooltip: 'Manage Columns', onPressed: () => Scaffold.of(context).openEndDrawer()),
           IconButton(icon: const Icon(Icons.analytics_outlined, color: AppColors.textSecondary), tooltip: 'Analytics', onPressed: () => _showAnalytics(context, ref)),
@@ -130,13 +137,13 @@ class HomeScreen extends ConsumerWidget {
               ]),
             )
           : null,
-      body: Column(children: [
-        const TaskFiltersBar(),
-        const Divider(height: 1, color: AppColors.border),
-        const ColumnVisibilityBar(compact: false),
-        const Divider(height: 1, color: AppColors.border),
-        Expanded(child: isMobile ? const AndroidChecklist() : _desktopBody(view)),
-      ]),
+      body: isMobile
+          ? const AndroidChecklist()
+          : Row(children: [
+              Container(width: 300, decoration: const BoxDecoration(border: Border(right: BorderSide(color: AppColors.border))), child: const FilterSidebarContent()),
+              const VerticalDivider(width: 1, thickness: 1, color: AppColors.border),
+              Expanded(child: _desktopBody(view)),
+            ]),
       bottomNavigationBar: isMobile
           ? NavigationBar(
               backgroundColor: AppColors.header,
