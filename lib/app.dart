@@ -17,6 +17,8 @@ class _TrackerAppState extends ConsumerState<TrackerApp> {
   void initState() {
     super.initState();
     Future.microtask(() async {
+      final identity = ref.read(identityServiceProvider);
+      await identity.init();
       final svc = ref.read(supabaseServiceProvider);
       await svc.init();
       if (mounted) setState(() => _init = true);
@@ -32,7 +34,10 @@ class _TrackerAppState extends ConsumerState<TrackerApp> {
         home: const Scaffold(body: Center(child: CircularProgressIndicator())),
       );
     }
-    final loggedIn = ref.watch(supabaseServiceProvider).isLoggedIn;
+    final identity = ref.watch(identityServiceProvider);
+    final loggedIn = identity.isLoggedIn;
+    // also watch svc to rebuild when data changes, but routing is based on identity
+    ref.watch(supabaseServiceProvider);
     return MaterialApp(
       title: 'Tracker Sheet',
       debugShowCheckedModeBanner: false,

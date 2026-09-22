@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../config/app_colors.dart';
 import '../providers/app_providers.dart';
-import '../config/supabase_config.dart';
 
 class AuthScreen extends ConsumerStatefulWidget {
   const AuthScreen({super.key});
@@ -11,26 +10,35 @@ class AuthScreen extends ConsumerStatefulWidget {
 }
 
 class _AuthScreenState extends ConsumerState<AuthScreen> {
-  final _email = TextEditingController();
-  final _pass = TextEditingController();
-  bool _isLogin = true;
+  final _nameCtrl = TextEditingController();
   bool _loading = false;
   String? _error;
 
   Future<void> _submit() async {
+    final name = _nameCtrl.text.trim();
+    if (name.isEmpty || name.length < 2) {
+      setState(() => _error = 'Please enter at least 2 characters.');
+      return;
+    }
     setState(() { _loading = true; _error = null; });
-    final svc = ref.read(supabaseServiceProvider);
     try {
-      if (_isLogin) {
-        await svc.signIn(_email.text.trim(), _pass.text);
-      } else {
-        await svc.signUp(_email.text.trim(), _pass.text);
-      }
+      final identity = ref.read(identityServiceProvider);
+      await identity.signInWithName(name);
+      // SupabaseService will auto-recreate via provider watch and init with new id
+      // trigger a manual init for current svc if needed
+      final svc = ref.read(supabaseServiceProvider);
+      await svc.init();
     } catch (e) {
-      setState(() => _error = e.toString());
+      setState(() => _error = e.toString().replaceAll('Exception: ', '').replaceAll('ArgumentError: ', ''));
     } finally {
       if (mounted) setState(() => _loading = false);
     }
+  }
+
+  @override
+  void dispose() {
+    _nameCtrl.dispose();
+    super.dispose();
   }
 
   @override
@@ -47,28 +55,28 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
             child: Padding(
               padding: const EdgeInsets.all(24),
               child: Column(mainAxisSize: MainAxisSize.min, children: [
-                Text(_isLogin ? 'Sign in' : 'Create account', style: const TextStyle(color: AppColors.textPrimary, fontSize: 20, fontWeight: FontWeight.w700)),
-                if (!isSupabaseConfigured) ...[
-                  const SizedBox(height: 8),
-                  Container(
-                    padding: const EdgeInsets.all(10),
-                    decoration: BoxDecoration(color: AppColors.inputFill, borderRadius: BorderRadius.circular(8), border: Border.all(color: AppColors.border)),
-                    child: const Text('Demo mode — Supabase not configured. Any email/password will log you in locally.', style: TextStyle(fontSize: 12, color: AppColors.textSecondary)),
-                  ),
-                ],
+                const Icon(Icons.person_rounded, size: 32, color: AppColors.accent),
+                const SizedBox(height: 12),
+                const Text('Welcome to Tracker Sheet', style: TextStyle(color: AppColors.textPrimary, fontSize: 20, fontWeight: FontWeight.w700)),
+                const SizedBox(height: 8),
+                const Text('Enter your name to continue. We’ll create your workspace instantly — no password needed.', style: TextStyle(color: AppColors.textSecondary, fontSize: 12), textAlign: TextAlign.center),
                 const SizedBox(height: 16),
                 TextField(
-                  controller: _email,
+                  controller: _nameCtrl,
                   style: const TextStyle(color: AppColors.textPrimary),
-                  decoration: const InputDecoration(labelText: 'Email'),
-                  keyboardType: TextInputType.emailAddress,
+                  decoration: const InputDecoration(labelText: 'Your name', hintText: 'e.g. Alex', prefixIcon: Icon(Icons.badge_outlined, size: 18)),
+                  textCapitalization: TextCapitalization.words,
+                  onSubmitted: (_) => _submit(),
                 ),
-                const SizedBox(height: 12),
-                TextField(
-                  controller: _pass,
-                  style: const TextStyle(color: AppColors.textPrimary),
-                  decoration: const InputDecoration(labelText: 'Password'),
-                  obscureText: true,
+                const SizedBox(height: 8),
+                Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(color: AppColors.inputFill, borderRadius: BorderRadius.circular(8), border: Border.all(color: AppColors.border)),
+                  child: Row(children: const [
+                    Icon(Icons.info_outline, size: 14, color: AppColors.textSecondary),
+                    SizedBox(width: 8),
+                    Expanded(child: Text('your name is your only key to your data — remember exactly how you typed it', style: TextStyle(fontSize: 11, color: AppColors.textSecondary, fontStyle: FontStyle.italic))),
+                  ]),
                 ),
                 if (_error != null) ...[
                   const SizedBox(height: 8),
@@ -79,13 +87,11 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
                   width: double.infinity,
                   child: FilledButton(
                     onPressed: _loading ? null : _submit,
-                    child: _loading ? const SizedBox(height: 16, width: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white)) : Text(_isLogin ? 'Sign in' : 'Sign up'),
+                    child: _loading ? const SizedBox(height: 16, width: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white)) : const Text('Continue'),
                   ),
                 ),
-                TextButton(onPressed: () => setState(() => _isLogin = !_isLogin), child: Text(_isLogin ? 'Need an account? Sign up' : 'Have an account? Sign in')),
-                const Divider(color: AppColors.border),
-                const Text('Auth: email/password only. Real-time sync via Supabase postgres_changes. Offline queue on Android.',
-                    style: TextStyle(fontSize: 11, color: AppColors.textSecondary), textAlign: TextAlign.center),
+                const SizedBox(height: 8),
+                const Text('Works on web and Android. Your data syncs instantly via Supabase — if you’re offline, edits queue and retry.', style: TextStyle(fontSize: 10, color: AppColors.textSecondary), textAlign: TextAlign.center),
               ]),
             ),
           ),

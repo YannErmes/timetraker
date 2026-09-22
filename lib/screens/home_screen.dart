@@ -17,12 +17,27 @@ class HomeScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final view = ref.watch(viewModeProvider);
     final svc = ref.watch(supabaseServiceProvider);
+    final identity = ref.watch(identityServiceProvider);
     final isMobile = MediaQuery.of(context).size.width < 700;
     return Scaffold(
       backgroundColor: AppColors.bg,
       appBar: AppBar(
         backgroundColor: AppColors.header,
-        title: const Text('Tracker Sheet', style: TextStyle(color: AppColors.textPrimary, fontWeight: FontWeight.w700, fontSize: 16)),
+        title: Row(children: [
+          const Text('Tracker Sheet', style: TextStyle(color: AppColors.textPrimary, fontWeight: FontWeight.w700, fontSize: 16)),
+          if (identity.name != null) ...[
+            const SizedBox(width: 10),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              decoration: BoxDecoration(color: AppColors.inputFill, borderRadius: BorderRadius.circular(8), border: Border.all(color: AppColors.border)),
+              child: Row(mainAxisSize: MainAxisSize.min, children: [
+                const Icon(Icons.person_rounded, size: 12, color: AppColors.accent),
+                const SizedBox(width: 4),
+                Text(identity.name!, style: const TextStyle(color: AppColors.textSecondary, fontSize: 11, fontWeight: FontWeight.w600)),
+              ]),
+            ),
+          ],
+        ]),
         actions: [
           if (!isMobile) ...[
             SegmentedButton<ViewMode>(
@@ -39,7 +54,29 @@ class HomeScreen extends ConsumerWidget {
           const ViewSettingsButton(),
           IconButton(icon: const Icon(Icons.view_column, color: AppColors.textSecondary), tooltip: 'Manage Columns', onPressed: () => Scaffold.of(context).openEndDrawer()),
           IconButton(icon: const Icon(Icons.analytics_outlined, color: AppColors.textSecondary), tooltip: 'Analytics', onPressed: () => _showAnalytics(context, ref)),
-          IconButton(icon: const Icon(Icons.logout, color: AppColors.textSecondary), onPressed: () => svc.signOut()),
+          PopupMenuButton<String>(
+            icon: const Icon(Icons.person_rounded, color: AppColors.textSecondary),
+            tooltip: identity.name ?? 'Account',
+            onSelected: (v) async {
+              if (v == 'change') {
+                final ok = await showDialog<bool>(
+                  context: context,
+                  builder: (_) => AlertDialog(
+                    backgroundColor: AppColors.surface,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8), side: const BorderSide(color: AppColors.border)),
+                    title: const Text('Change name?', style: TextStyle(color: AppColors.textPrimary)),
+                    content: const Text('You will be signed out locally. Your data stays on the server under your current name and can be reclaimed by entering the exact same name again.', style: TextStyle(color: AppColors.textSecondary, fontSize: 12)),
+                    actions: [TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')), FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('Continue'))],
+                  ),
+                );
+                if (ok == true) await svc.signOut();
+              }
+            },
+            itemBuilder: (_) => [
+              PopupMenuItem(value: 'change', child: Text('Signed in as "${identity.name ?? ''}" — change name')),
+              const PopupMenuItem(value: 'change', child: Text('Sign out / change name')),
+            ],
+          ),
           const SizedBox(width: 4),
         ],
       ),
@@ -48,15 +85,48 @@ class HomeScreen extends ConsumerWidget {
           ? Drawer(
               backgroundColor: AppColors.surface,
               child: ListView(children: [
-                const DrawerHeader(
-                  decoration: BoxDecoration(color: AppColors.header),
-                  child: Text('Tracker Sheet', style: TextStyle(color: AppColors.textPrimary, fontWeight: FontWeight.w700)),
+                DrawerHeader(
+                  decoration: const BoxDecoration(color: AppColors.header),
+                  child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                    const Text('Tracker Sheet', style: TextStyle(color: AppColors.textPrimary, fontWeight: FontWeight.w700)),
+                    const SizedBox(height: 8),
+                    if (identity.name != null)
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                        decoration: BoxDecoration(color: AppColors.inputFill, borderRadius: BorderRadius.circular(8), border: Border.all(color: AppColors.border)),
+                        child: Row(mainAxisSize: MainAxisSize.min, children: [
+                          const Icon(Icons.person_rounded, size: 12, color: AppColors.accent),
+                          const SizedBox(width: 4),
+                          Text(identity.name!, style: const TextStyle(color: AppColors.textSecondary, fontSize: 11, fontWeight: FontWeight.w600)),
+                        ]),
+                      ),
+                  ]),
                 ),
                 ListTile(title: const Text('Weekly', style: TextStyle(color: AppColors.textPrimary)), selected: view == ViewMode.weekly, selectedTileColor: AppColors.inputFill, onTap: () { ref.read(viewModeProvider.notifier).state = ViewMode.weekly; Navigator.pop(context); }),
                 ListTile(title: const Text('Daily', style: TextStyle(color: AppColors.textPrimary)), selected: view == ViewMode.daily, selectedTileColor: AppColors.inputFill, onTap: () { ref.read(viewModeProvider.notifier).state = ViewMode.daily; Navigator.pop(context); }),
                 ListTile(title: const Text('Monthly', style: TextStyle(color: AppColors.textPrimary)), selected: view == ViewMode.monthly, selectedTileColor: AppColors.inputFill, onTap: () { ref.read(viewModeProvider.notifier).state = ViewMode.monthly; Navigator.pop(context); }),
                 const Divider(color: AppColors.border),
                 ListTile(title: const Text('Today (Android checklist)', style: TextStyle(color: AppColors.textSecondary)), onTap: () { ref.read(viewModeProvider.notifier).state = ViewMode.daily; Navigator.pop(context); }),
+                const Divider(color: AppColors.border),
+                ListTile(
+                  leading: const Icon(Icons.person_rounded, size: 16, color: AppColors.textSecondary),
+                  title: Text('Signed in as "${identity.name ?? ''}"', style: const TextStyle(color: AppColors.textSecondary, fontSize: 12)),
+                  subtitle: const Text('Tap to change name', style: TextStyle(color: AppColors.textSecondary, fontSize: 10)),
+                  onTap: () async {
+                    Navigator.pop(context);
+                    final ok = await showDialog<bool>(
+                      context: context,
+                      builder: (_) => AlertDialog(
+                        backgroundColor: AppColors.surface,
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8), side: const BorderSide(color: AppColors.border)),
+                        title: const Text('Change name?', style: TextStyle(color: AppColors.textPrimary)),
+                        content: const Text('Your data stays under the current name. You can reclaim it later by entering the exact same name again.', style: TextStyle(color: AppColors.textSecondary, fontSize: 12)),
+                        actions: [TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')), FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('Continue'))],
+                      ),
+                    );
+                    if (ok == true) await svc.signOut();
+                  },
+                ),
               ]),
             )
           : null,
