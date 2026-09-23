@@ -21,21 +21,28 @@ class HomeScreen extends ConsumerWidget {
       backgroundColor: AppColors.bg,
       appBar: AppBar(
         backgroundColor: AppColors.header,
-        title: Row(children: [
-          const Text('Tracker Sheet', style: TextStyle(color: AppColors.textPrimary, fontWeight: FontWeight.w700, fontSize: 16)),
-          if (identity.name != null) ...[
-            const SizedBox(width: 10),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-              decoration: BoxDecoration(color: AppColors.inputFill, borderRadius: BorderRadius.circular(8), border: Border.all(color: AppColors.border)),
-              child: Row(mainAxisSize: MainAxisSize.min, children: [
-                const Icon(Icons.person_rounded, size: 12, color: AppColors.accent),
-                const SizedBox(width: 4),
-                Text(identity.name!, style: const TextStyle(color: AppColors.textSecondary, fontSize: 11, fontWeight: FontWeight.w600)),
-              ]),
-            ),
-          ],
-        ]),
+        automaticallyImplyLeading: isMobile,
+        titleSpacing: isMobile ? 4 : 16,
+        title: LayoutBuilder(builder: (ctx, c) {
+          final narrow = c.maxWidth < 380;
+          return Row(children: [
+            Flexible(child: Text('Tracker Sheet', style: const TextStyle(color: AppColors.textPrimary, fontWeight: FontWeight.w700, fontSize: 16), overflow: TextOverflow.ellipsis)),
+            if (!isMobile && identity.name != null && !narrow) ...[
+              const SizedBox(width: 10),
+              Flexible(
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(color: AppColors.inputFill, borderRadius: BorderRadius.circular(8), border: Border.all(color: AppColors.border)),
+                  child: Row(mainAxisSize: MainAxisSize.min, children: [
+                    const Icon(Icons.person_rounded, size: 12, color: AppColors.accent),
+                    const SizedBox(width: 4),
+                    Flexible(child: Text(identity.name!, style: const TextStyle(color: AppColors.textSecondary, fontSize: 11, fontWeight: FontWeight.w600), overflow: TextOverflow.ellipsis)),
+                  ]),
+                ),
+              ),
+            ],
+          ]);
+        }),
         actions: [
           if (!isMobile) ...[
             SegmentedButton<ViewMode>(
@@ -47,42 +54,77 @@ class HomeScreen extends ConsumerWidget {
               selected: {view},
               onSelectionChanged: (s) => ref.read(viewModeProvider.notifier).state = s.first,
             ),
-            const SizedBox(width: 12),
+            const SizedBox(width: 8),
           ],
-          if (isMobile)
-            IconButton(
-              icon: const Icon(Icons.filter_list_rounded, color: AppColors.textSecondary),
-              tooltip: 'Filters',
-              onPressed: () {
+          IconButton(
+            icon: const Icon(Icons.filter_list_rounded, color: AppColors.textSecondary),
+            tooltip: 'Filters',
+            onPressed: () {
+              if (isMobile) {
                 showModalBottomSheet(context: context, isScrollControlled: true, backgroundColor: Colors.transparent, builder: (_) => DraggableScrollableSheet(initialChildSize: 0.7, maxChildSize: 0.9, minChildSize: 0.4, builder: (_, c) => Container(decoration: const BoxDecoration(color: AppColors.surface, borderRadius: BorderRadius.vertical(top: Radius.circular(12))), child: const FilterSidebarContent(showClose: true))));
-              },
-            ),
-          const ViewSettingsButton(),
-          IconButton(icon: const Icon(Icons.view_column, color: AppColors.textSecondary), tooltip: 'Manage Columns', onPressed: () => Scaffold.of(context).openEndDrawer()),
-          IconButton(icon: const Icon(Icons.analytics_outlined, color: AppColors.textSecondary), tooltip: 'Analytics', onPressed: () => _showAnalytics(context, ref)),
-          PopupMenuButton<String>(
-            icon: const Icon(Icons.person_rounded, color: AppColors.textSecondary),
-            tooltip: identity.name ?? 'Account',
-            onSelected: (v) async {
-              if (v == 'change') {
-                final ok = await showDialog<bool>(
-                  context: context,
-                  builder: (_) => AlertDialog(
-                    backgroundColor: AppColors.surface,
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8), side: const BorderSide(color: AppColors.border)),
-                    title: const Text('Change name?', style: TextStyle(color: AppColors.textPrimary)),
-                    content: const Text('You will be signed out locally. Your data stays on the server under your current name and can be reclaimed by entering the exact same name again.', style: TextStyle(color: AppColors.textSecondary, fontSize: 12)),
-                    actions: [TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')), FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('Continue'))],
-                  ),
-                );
-                if (ok == true) await svc.signOut();
+              } else {
+                // desktop: toggle collapsible sidebar
+                ref.read(isFilterSidebarCollapsedProvider.notifier).state = !ref.read(isFilterSidebarCollapsedProvider);
               }
             },
-            itemBuilder: (_) => [
-              PopupMenuItem(value: 'change', child: Text('Signed in as "${identity.name ?? ''}" — change name')),
-              const PopupMenuItem(value: 'change', child: Text('Sign out / change name')),
-            ],
           ),
+          const ViewSettingsButton(),
+          if (!isMobile) ...[
+            IconButton(icon: const Icon(Icons.view_column, color: AppColors.textSecondary), tooltip: 'Manage Columns', onPressed: () => Scaffold.of(context).openEndDrawer()),
+            IconButton(icon: const Icon(Icons.analytics_outlined, color: AppColors.textSecondary), tooltip: 'Analytics', onPressed: () => _showAnalytics(context, ref)),
+          ] else ...[
+            PopupMenuButton<String>(
+              icon: const Icon(Icons.more_horiz, color: AppColors.textSecondary),
+              tooltip: 'More',
+              onSelected: (v) async {
+                if (v == 'columns') Scaffold.of(context).openEndDrawer();
+                if (v == 'analytics') _showAnalytics(context, ref);
+                if (v == 'change') {
+                  final ok = await showDialog<bool>(
+                    context: context,
+                    builder: (_) => AlertDialog(
+                      backgroundColor: AppColors.surface,
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8), side: const BorderSide(color: AppColors.border)),
+                      title: const Text('Change name?', style: TextStyle(color: AppColors.textPrimary)),
+                      content: const Text('You will be signed out locally. Your data stays on the server under your current name and can be reclaimed by entering the exact same name again.', style: TextStyle(color: AppColors.textSecondary, fontSize: 12)),
+                      actions: [TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')), FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('Continue'))],
+                    ),
+                  );
+                  if (ok == true) await svc.signOut();
+                }
+              },
+              itemBuilder: (_) => [
+                const PopupMenuItem(value: 'columns', child: Text('Manage Columns')),
+                const PopupMenuItem(value: 'analytics', child: Text('Analytics')),
+                PopupMenuItem(value: 'change', child: Text('Signed in as "${identity.name ?? ''}"')),
+                const PopupMenuItem(value: 'change', child: Text('Sign out / change name')),
+              ],
+            ),
+          ],
+          if (!isMobile)
+            PopupMenuButton<String>(
+              icon: const Icon(Icons.person_rounded, color: AppColors.textSecondary),
+              tooltip: identity.name ?? 'Account',
+              onSelected: (v) async {
+                if (v == 'change') {
+                  final ok = await showDialog<bool>(
+                    context: context,
+                    builder: (_) => AlertDialog(
+                      backgroundColor: AppColors.surface,
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8), side: const BorderSide(color: AppColors.border)),
+                      title: const Text('Change name?', style: TextStyle(color: AppColors.textPrimary)),
+                      content: const Text('You will be signed out locally. Your data stays on the server under your current name and can be reclaimed by entering the exact same name again.', style: TextStyle(color: AppColors.textSecondary, fontSize: 12)),
+                      actions: [TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')), FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('Continue'))],
+                    ),
+                  );
+                  if (ok == true) await svc.signOut();
+                }
+              },
+              itemBuilder: (_) => [
+                PopupMenuItem(value: 'change', child: Text('Signed in as "${identity.name ?? ''}" — change name')),
+                const PopupMenuItem(value: 'change', child: Text('Sign out / change name')),
+              ],
+            ),
           const SizedBox(width: 4),
         ],
       ),
