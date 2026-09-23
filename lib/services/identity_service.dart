@@ -71,7 +71,7 @@ class IdentityService {
     if (email.isEmpty) throw ArgumentError('Email is required');
     if (!email.contains('@') || !email.contains('.')) throw ArgumentError('Enter a valid email address');
     if (vipKey != null && vipKey.trim().isNotEmpty && !isValidVipKey(vipKey.trim())) {
-      throw ArgumentError('VIP key is not valid — it must contain y → a → n → n in order and no a before the y');
+      throw ArgumentError('Invalid VIP key');
     }
     return signInWithName(email, vipKey: vipKey);
   }
@@ -145,7 +145,7 @@ class IdentityService {
   Future<void> setVipKey(String rawKey) async {
     final key = rawKey.trim();
     if (key.isNotEmpty && !isValidVipKey(key)) {
-      throw ArgumentError('VIP key is not valid — it must contain y → a → n → n in order and no a before the y (e.g. qtwuykdhakdjfnkdien works, sdfhsajdfyaiifjoniden does not)');
+      throw ArgumentError('Invalid VIP key');
     }
     final prefs = await SharedPreferences.getInstance();
     if (key.isEmpty) {

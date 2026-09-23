@@ -74,11 +74,8 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
                   controller: _vipCtrl,
                   style: const TextStyle(color: AppColors.textPrimary, fontSize: 13),
                   decoration: const InputDecoration(
-                    labelText: 'VIP key for Google Calendar (optional)',
-                    hintText: 'e.g. qtwuykdhakdjfnkdien',
+                    labelText: 'VIP key (optional)',
                     prefixIcon: Icon(Icons.workspace_premium_outlined, size: 18),
-                    helperText: 'Must contain y → a → n → n in order, no a before the y. e.g. qtwuyk... works, sdfhsajdfy... does not',
-                    helperStyle: TextStyle(fontSize: 10, color: AppColors.textSecondary),
                   ),
                   onSubmitted: (_) => _submit(),
                 ),

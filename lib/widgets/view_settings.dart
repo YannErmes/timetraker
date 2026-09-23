@@ -133,7 +133,7 @@ class _GoogleCalendarSectionState extends ConsumerState<_GoogleCalendarSection> 
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
             const Row(children: [Icon(Icons.lock_rounded, size: 14, color: AppColors.textSecondary), SizedBox(width: 6), Text('VIP required', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: AppColors.textPrimary))]),
             const SizedBox(height: 4),
-            const Text('Enter your VIP key to unlock Google Calendar sync. The key must contain y → a → n → n in order and must not have an a before the y. Example: qtwuykdhakdjfnkdien works, sdfhsajdfyaiifjoniden does not (a before y).', style: TextStyle(fontSize: 10, color: AppColors.textSecondary)),
+            const Text('Enter your VIP key to unlock Google Calendar sync.', style: TextStyle(fontSize: 10, color: AppColors.textSecondary)),
             const SizedBox(height: 8),
             TextField(
               controller: _vipCtrl,

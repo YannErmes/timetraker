@@ -58,7 +58,7 @@ class GoogleCalendarService {
   /// Step 1: user puts email implicitly via Google picker -> consent
   Future<GoogleSignInAccount?> connect() async {
     if (!await isVipUnlocked()) {
-      throw Exception('VIP key required — enter a valid VIP key (must contain y → a → n → n in order, no a before y)');
+      throw Exception('VIP key required');
     }
     try {
       final acc = await _googleSignIn.signIn();
