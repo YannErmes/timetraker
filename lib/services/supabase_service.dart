@@ -225,7 +225,17 @@ class SupabaseService {
     if (_columns.isEmpty) {
       final defaults = ColumnDefinition.defaultColumns();
       for (final c in defaults) {
-        await _client!.from('column_definitions').insert(c.toSupabase(userId!));
+        try {
+          // use upsert to be idempotent per (user_id, id) — works after PK fix, and gracefully handles old PK
+          await _client!.from('column_definitions').upsert(c.toSupabase(userId!), onConflict: 'user_id,id');
+        } catch (_) {
+          try {
+            await _client!.from('column_definitions').insert(c.toSupabase(userId!));
+          } catch (e) {
+            // ignore duplicate key (old PK) — will be fixed by schema migration
+            debugPrint('insert default col ignored duplicate: $e');
+          }
+        }
       }
       final r2 = await _client!.from('column_definitions').select().eq('user_id', userId!).order('position');
       _columns = (r2 as List).map((j) => ColumnDefinition.fromSupabase(Map<String, dynamic>.from(j))).toList();
@@ -235,15 +245,33 @@ class SupabaseService {
       if (!hasSchedule) {
         final schedule = ColumnDefinition.defaultColumns().firstWhere((c) => c.id == 'col_schedule');
         for (final c in _columns) {
-          await _client!.from('column_definitions').update({'position': c.position + 1}).eq('id', c.id);
+          try {
+            await _client!.from('column_definitions').update({'position': c.position + 1}).eq('id', c.id).eq('user_id', userId!);
+          } catch (_) {}
         }
-        await _client!.from('column_definitions').insert(schedule.toSupabase(userId!));
+        try {
+          await _client!.from('column_definitions').upsert(schedule.toSupabase(userId!), onConflict: 'user_id,id');
+        } catch (_) {
+          try {
+            await _client!.from('column_definitions').insert(schedule.toSupabase(userId!));
+          } catch (e) {
+            debugPrint('insert schedule ignored: $e');
+          }
+        }
         needsRefetch = true;
       }
       final hasNote = _columns.any((c) => c.id == 'col_note');
       if (!hasNote) {
         final note = ColumnDefinition.defaultColumns().firstWhere((c) => c.id == 'col_note');
-        await _client!.from('column_definitions').insert(note.copyWith(position: _columns.length + (hasSchedule ? 0 : 1)).toSupabase(userId!));
+        try {
+          await _client!.from('column_definitions').upsert(note.copyWith(position: _columns.length + (hasSchedule ? 0 : 1)).toSupabase(userId!), onConflict: 'user_id,id');
+        } catch (_) {
+          try {
+            await _client!.from('column_definitions').insert(note.copyWith(position: _columns.length + (hasSchedule ? 0 : 1)).toSupabase(userId!));
+          } catch (e) {
+            debugPrint('insert note ignored: $e');
+          }
+        }
         needsRefetch = true;
       }
       final timeCol = _columns.where((c) => c.id == 'col_time').firstOrNull;

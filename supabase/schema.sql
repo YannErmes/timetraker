@@ -40,17 +40,38 @@ drop policy if exists "Allow all tasks" on public.tasks;
 create policy "Allow all tasks" on public.tasks for all using (true) with check (true);
 create index if not exists idx_tasks_user_pos on public.tasks(user_id, position);
 
--- 2. Column definitions (user-managed columns)
+-- 2. Column definitions (user-managed columns) — per-user, so id can repeat across users
 create table if not exists public.column_definitions (
-  id text primary key, -- e.g. col_xxx
+  id text not null, -- e.g. col_xxx, scoped per user
   user_id uuid not null,
   label text not null,
   type text not null, -- checkbox | status | number | date | datetime | tags | text | timer | schedule
   position int not null,
   config jsonb not null default '{}'::jsonb, -- { options: [{id,label,colorHex}], unit: 'h' }
   visible_days jsonb, -- null or ["tuesday", ...]
-  created_at timestamp with time zone default now()
+  created_at timestamp with time zone default now(),
+  primary key (user_id, id)
 );
+-- Fix PK for per-user columns: was `id` alone, now `(user_id, id)`
+do $$ begin
+  -- drop old PK if it exists and is on (id) only
+  if exists (select 1 from pg_constraint where conname='column_definitions_pkey') then
+    begin
+      alter table public.column_definitions drop constraint column_definitions_pkey;
+    exception when others then null;
+    end;
+    begin
+      alter table public.column_definitions add primary key (user_id, id);
+    exception when others then
+      -- if already composite or other error, try to ensure PK exists
+      begin
+        alter table public.column_definitions add primary key (user_id, id);
+      exception when others then null;
+      end;
+    end;
+  end if;
+exception when others then null; end $$;
+
 do $$ begin
   if exists (select 1 from information_schema.table_constraints where constraint_name='column_definitions_user_id_fkey' and table_name='column_definitions') then
     alter table public.column_definitions drop constraint column_definitions_user_id_fkey;
