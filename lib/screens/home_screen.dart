@@ -6,7 +6,6 @@ import '../widgets/weekly_grid.dart';
 import '../widgets/daily_view.dart';
 import '../widgets/monthly_view.dart';
 import '../widgets/column_settings_panel.dart';
-import '../widgets/android_checklist.dart';
 import '../widgets/view_settings.dart';
 import '../widgets/filter_sidebar.dart';
 
@@ -138,12 +137,12 @@ class HomeScreen extends ConsumerWidget {
             )
           : null,
       body: isMobile
-          ? const AndroidChecklist()
+          ? _mobileBody(view)
           : Row(children: [
               AnimatedContainer(
                 duration: const Duration(milliseconds: 250),
                 curve: Curves.easeInOut,
-                width: ref.watch(isFilterSidebarCollapsedProvider) ? 0 : 300,
+                width: ref.watch(isFilterSidebarCollapsedProvider) ? 0 : 280,
                 clipBehavior: Clip.hardEdge,
                 decoration: const BoxDecoration(border: Border(right: BorderSide(color: AppColors.border))),
                 child: ref.watch(isFilterSidebarCollapsedProvider) ? const SizedBox.shrink() : const FilterSidebarContent(),
@@ -164,6 +163,14 @@ class HomeScreen extends ConsumerWidget {
               ),
               Expanded(child: _desktopBody(view)),
             ]),
+      floatingActionButton: isMobile
+          ? FloatingActionButton(
+              backgroundColor: AppColors.accent,
+              foregroundColor: Colors.white,
+              onPressed: () => _showAddTaskForCurrentView(context, ref),
+              child: const Icon(Icons.add_rounded),
+            )
+          : null,
       bottomNavigationBar: isMobile
           ? NavigationBar(
               backgroundColor: AppColors.header,
@@ -189,6 +196,62 @@ class HomeScreen extends ConsumerWidget {
       case ViewMode.monthly:
         return const MonthlyView();
     }
+  }
+
+  Widget _mobileBody(ViewMode view) {
+    // On phone, use the same desktop views but they are already responsive (Weekly has horizontal scroll + pagination, Daily has square grid, Monthly has grid)
+    // Wrap in a SafeArea and add a bit of padding for thumb reach
+    return _desktopBody(view);
+  }
+
+  void _showAddTaskForCurrentView(BuildContext context, WidgetRef ref) {
+    final view = ref.read(viewModeProvider);
+    final svc = ref.read(supabaseServiceProvider);
+    if (view == ViewMode.monthly) {
+      // Monthly has its own Add task dialog with date+params, trigger it via MonthlyView's method
+      // For mobile, just show a simple add task dialog that will be scheduled for today
+      final c = TextEditingController();
+      showDialog(
+        context: context,
+        builder: (_) => AlertDialog(
+          backgroundColor: AppColors.surface,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12), side: const BorderSide(color: AppColors.border)),
+          title: const Text('Add task', style: TextStyle(color: AppColors.textPrimary)),
+          content: TextField(controller: c, autofocus: true, style: const TextStyle(color: AppColors.textPrimary), decoration: const InputDecoration(labelText: 'Task name', hintText: 'e.g. Gym')),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+            FilledButton(
+              onPressed: () async {
+                final name = c.text.trim();
+                if (name.isEmpty) return;
+                await svc.addTask(name);
+                // auto-schedule for today so it appears immediately in Daily
+                final today = ref.read(selectedDateProvider);
+                await svc.toggleChecked(svc.tasks.lastWhere((t) => t.name == name).id, today, true);
+                if (context.mounted) Navigator.pop(context);
+              },
+              child: const Text('Add'),
+            ),
+          ],
+        ),
+      );
+      return;
+    }
+    // Weekly/Daily: use same add as desktop
+    final c = TextEditingController();
+    showDialog(
+      context: context,
+      builder: (_) => AlertDialog(
+        backgroundColor: AppColors.surface,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8), side: const BorderSide(color: AppColors.border)),
+        title: const Text('Add task', style: TextStyle(color: AppColors.textPrimary)),
+        content: TextField(controller: c, autofocus: true, style: const TextStyle(color: AppColors.textPrimary), decoration: const InputDecoration(labelText: 'Task name')),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+          FilledButton(onPressed: () { if (c.text.trim().isNotEmpty) svc.addTask(c.text.trim()); Navigator.pop(context); }, child: const Text('Add')),
+        ],
+      ),
+    );
   }
 
   void _showAnalytics(BuildContext context, WidgetRef ref) {
