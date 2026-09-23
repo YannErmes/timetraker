@@ -179,6 +179,24 @@ class GoogleCalendarService {
     }
   }
 
+  /// Delete all Google events for a task (when task is deleted in app)
+  Future<void> deleteAllForTask(String taskId) async {
+    if (!await isAutoSyncEnabled()) return;
+    if (!await isConnected()) return;
+    final cal = await _getCalendarApi();
+    if (cal == null) return;
+    final map = await _loadEventMap();
+    final keys = map.keys.where((k) => k.startsWith('${taskId}_')).toList();
+    for (final k in keys) {
+      final eventId = map[k];
+      if (eventId == null) continue;
+      try {
+        await cal.events.delete('primary', eventId);
+      } catch (_) {}
+      await _removeEventId(k);
+    }
+  }
+
   /// Sync whole month (monthly view) — iterates scheduled entries for that month
   Future<int> syncMonth(DateTime month, List<Task> tasks, List<DayEntry> entries) async {
     if (!await isConnected()) throw Exception('Not connected to Google');

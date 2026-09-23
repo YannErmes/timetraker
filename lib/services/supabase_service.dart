@@ -319,6 +319,8 @@ class SupabaseService {
     _tasks = _tasks.where((e) => e.id != id).toList();
     _tasksCtrl.add(_tasks);
     await _persistCache();
+    // also delete Google Calendar events for this task (fire-and-forget)
+    unawaited(GoogleCalendarService.instance.deleteAllForTask(id));
     if (!isConfigured) {
       final uid = userId;
       if (uid != null) _demoTasksByUser[uid]?.removeWhere((e) => e.id == id);
