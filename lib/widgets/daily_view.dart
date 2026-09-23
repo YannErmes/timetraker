@@ -8,6 +8,7 @@ import '../providers/column_visibility.dart';
 import '../utils/date_utils.dart';
 import '../models/enums.dart';
 import '../models/column_definition.dart';
+import '../models/timer_value.dart';
 import 'cells/cell_widgets.dart';
 import 'cells/timer_cell.dart';
 
@@ -30,7 +31,6 @@ class _DailyViewState extends ConsumerState<DailyView> {
     final hidden = ref.watch(columnVisibilityProvider);
     final cols = allCols.where((c) => !hidden.contains(c.id)).toList();
     final date = ref.watch(selectedDateProvider);
-    // Daily now filters like Monthly: only tasks scheduled (checkbox checked) for this day
     final scheduledRaw = allTasks.where((t) => (svc.entryFor(t.id, date)?.checked ?? false)).toList();
     final filters = ref.watch(taskFiltersProvider);
     final scheduledTasks = scheduledRaw.where((t) {
@@ -60,6 +60,47 @@ class _DailyViewState extends ConsumerState<DailyView> {
     if (_rowPage < 0) _rowPage = 0;
     final tasks = rowsVisible == 0 ? scheduledTasks : scheduledTasks.skip(_rowPage * rowsVisible).take(rowsVisible).toList();
 
+    // --- stats for this day ---
+    final statusCol = allCols.where((c) => c.type == ColumnType.status).firstOrNull;
+    final timeCol = allCols.where((c) => c.type == ColumnType.timer).firstOrNull;
+    int total = scheduledRaw.length;
+    int done = 0;
+    int inProgress = 0;
+    int totalSec = 0;
+    int doneSec = 0;
+    int elapsedSec = 0;
+    int remainingSec = 0;
+    List<String> doneNames = [];
+    List<String> todoNames = [];
+    for (final t in scheduledRaw) {
+      final e = svc.entryFor(t.id, date);
+      final s = statusCol != null ? e?.data[statusCol.id] as String? : null;
+      if (s == 'done') done++;
+      if (s == 'in_progress' || s == 'in progress') inProgress++;
+      // time
+      if (timeCol != null) {
+        final raw = e?.data[timeCol.id];
+        final tv = TimerValue.tryParse(raw);
+        if (tv != null && tv.durationSec > 0) {
+          totalSec += tv.durationSec;
+          final eff = tv.effectiveElapsed(DateTime.now());
+          elapsedSec += eff.clamp(0, tv.durationSec);
+          if (s == 'done') {
+            doneSec += tv.durationSec;
+            remainingSec += 0;
+          } else {
+            doneSec += 0;
+            remainingSec += (tv.durationSec - eff).clamp(0, tv.durationSec);
+          }
+        }
+      }
+      if (s == 'done') doneNames.add(t.name.isEmpty ? 'Untitled' : t.name);
+      else todoNames.add(t.name.isEmpty ? 'Untitled' : t.name);
+    }
+    final pct = total == 0 ? 0.0 : done / total;
+    final width = MediaQuery.of(context).size.width;
+    final crossAxisCount = width < 600 ? 1 : width < 900 ? 2 : width < 1300 ? 3 : 4;
+
     return Container(
       color: AppColors.bg,
       child: Column(children: [
@@ -77,6 +118,59 @@ class _DailyViewState extends ConsumerState<DailyView> {
           ]),
         ),
         const Divider(height: 1, color: AppColors.border),
+        // Stats panel
+        Container(
+          color: AppColors.surface,
+          padding: const EdgeInsets.all(12),
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Row(children: [
+              const Icon(Icons.insights_rounded, size: 14, color: AppColors.accent),
+              const SizedBox(width: 6),
+              Text('Stats for ${formatWeekday(date)} ${formatDayHeader(date)}', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: AppColors.textPrimary)),
+              const Spacer(),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(color: pct >= 1 ? AppColors.doneFill : AppColors.inputFill, borderRadius: BorderRadius.circular(8), border: Border.all(color: pct >= 1 ? AppColors.doneBorder : AppColors.border)),
+                child: Text('${(pct * 100).toStringAsFixed(0)}% done', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: pct >= 1 ? AppColors.doneText : AppColors.textSecondary)),
+              ),
+            ]),
+            const SizedBox(height: 10),
+            LinearProgressIndicator(value: pct, minHeight: 6, backgroundColor: AppColors.inputFill, valueColor: AlwaysStoppedAnimation(pct >= 1 ? const Color(0xFF22C55E) : AppColors.accent), borderRadius: BorderRadius.circular(8)),
+            const SizedBox(height: 12),
+            Wrap(spacing: 8, runSpacing: 8, children: [
+              _statChip(Icons.list_alt_rounded, 'Total', '$total tasks', AppColors.textPrimary),
+              _statChip(Icons.check_circle_rounded, 'Done', '$done', const Color(0xFF22C55E)),
+              _statChip(Icons.timelapse_rounded, 'In progress', '$inProgress', const Color(0xFFF59E0B)),
+              _statChip(Icons.schedule_rounded, 'Total time', TimerValue.formatSec(totalSec), AppColors.accent),
+              _statChip(Icons.hourglass_bottom_rounded, 'Done time', TimerValue.formatSec(doneSec), const Color(0xFF22C55E)),
+              _statChip(Icons.hourglass_empty_rounded, 'Left', TimerValue.formatSec(remainingSec), const Color(0xFFF43F5E)),
+              _statChip(Icons.timelapse_rounded, 'Elapsed', TimerValue.formatSec(elapsedSec), AppColors.textSecondary),
+            ]),
+            if (doneNames.isNotEmpty || todoNames.isNotEmpty) ...[
+              const SizedBox(height: 10),
+              const Divider(color: AppColors.border, height: 1),
+              const SizedBox(height: 8),
+              Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Expanded(
+                  child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                    const Row(children: [Icon(Icons.check, size: 12, color: Color(0xFF22C55E)), SizedBox(width: 4), Text('Done', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: Color(0xFF22C55E)))]),
+                    const SizedBox(height: 4),
+                    Text(doneNames.isEmpty ? '—' : doneNames.take(5).join(', ') + (doneNames.length > 5 ? ' +${doneNames.length - 5} more' : ''), style: const TextStyle(fontSize: 11, color: AppColors.textSecondary)),
+                  ]),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                    const Row(children: [Icon(Icons.pending_rounded, size: 12, color: AppColors.textSecondary), SizedBox(width: 4), Text('Left to do', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: AppColors.textSecondary))]),
+                    const SizedBox(height: 4),
+                    Text(todoNames.isEmpty ? '—' : todoNames.take(5).join(', ') + (todoNames.length > 5 ? ' +${todoNames.length - 5} more' : ''), style: const TextStyle(fontSize: 11, color: AppColors.textSecondary)),
+                  ]),
+                ),
+              ]),
+            ],
+          ]),
+        ),
+        const Divider(height: 1, color: AppColors.border),
         Expanded(
           child: tasks.isEmpty
               ? Center(
@@ -90,92 +184,20 @@ class _DailyViewState extends ConsumerState<DailyView> {
                     Text('${scheduledTasks.length} of ${allTasks.length} tasks scheduled for ${formatWeekday(date)} ${formatDayHeader(date)}', style: const TextStyle(color: AppColors.textSecondary, fontSize: 10)),
                   ]),
                 )
-              : ListView.separated(
+              : GridView.builder(
                   padding: const EdgeInsets.all(12),
+                  gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                    crossAxisCount: crossAxisCount,
+                    crossAxisSpacing: 12,
+                    mainAxisSpacing: 12,
+                    childAspectRatio: 1.0,
+                  ),
                   itemCount: tasks.length,
-                  separatorBuilder: (_, __) => const SizedBox(height: 8),
                   itemBuilder: (_, i) {
                     final t = tasks[i];
                     final e = svc.entryFor(t.id, date);
                     final checked = e?.checked ?? false;
-                    return Card(
-                      color: AppColors.surface,
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8), side: const BorderSide(color: AppColors.border)),
-                      child: Padding(padding: const EdgeInsets.all(12), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                        Row(children: [
-                          Checkbox(value: checked, onChanged: (v) => svc.toggleChecked(t.id, date, v ?? false)),
-                          Expanded(child: Text(t.name.isEmpty ? 'Untitled' : t.name, style: const TextStyle(fontWeight: FontWeight.w600, color: AppColors.textPrimary))),
-                          PopupMenuButton(color: AppColors.surface, icon: const Icon(Icons.more_horiz, color: AppColors.textSecondary), onSelected: (v) {
-                            if (v == 'rename') {
-                              final c = TextEditingController(text: t.name);
-                              showDialog(context: context, builder: (_) => AlertDialog(backgroundColor: AppColors.surface, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8), side: const BorderSide(color: AppColors.border)), title: const Text('Rename', style: TextStyle(color: AppColors.textPrimary)), content: TextField(controller: c, style: const TextStyle(color: AppColors.textPrimary), decoration: const InputDecoration(border: OutlineInputBorder())), actions: [TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')), FilledButton(onPressed: () { svc.updateTask(t.copyWith(name: c.text)); Navigator.pop(context); }, child: const Text('Save'))]));
-                            }
-                            if (v == 'delete') svc.deleteTask(t.id);
-                          }, itemBuilder: (_) => const [PopupMenuItem(value: 'rename', child: Text('Rename')), PopupMenuItem(value: 'delete', child: Text('Delete'))])
-                        ]),
-                        const Divider(color: AppColors.border, height: 16),
-                        Wrap(spacing: 12, runSpacing: 12, children: [
-                          for (final col in cols.where((c) => c.id != 'col_note' && !(c.type == ColumnType.text && c.label.toLowerCase() == 'note')))
-                            SizedBox(width: 200, child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                              Text(col.label, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: AppColors.textSecondary, letterSpacing: 0.4)),
-                              const SizedBox(height: 6),
-                              Builder(builder: (_) {
-                                final raw = e?.valueFor(col.id);
-                                switch (col.type) {
-                                  case ColumnType.schedule:
-                                    return ScheduleCell(value: raw as String?, onChanged: (v) => svc.setCellValue(t.id, date, col.id, v));
-                                  case ColumnType.status:
-                                    return StatusCell(valueId: raw as String?, options: col.statusOptions, onChanged: (v) => svc.setCellValue(t.id, date, col.id, v));
-                                  case ColumnType.number:
-                                  case ColumnType.text:
-                                    return DurationCell(value: raw as String?, onChanged: (v) => svc.setCellValue(t.id, date, col.id, v));
-                                  case ColumnType.timer:
-                                    return TimerCell(taskId: t.id, date: date, columnId: col.id, rawValue: raw);
-                                  case ColumnType.checkbox:
-                                    return Checkbox(value: raw == true, onChanged: (v) => svc.setCellValue(t.id, date, col.id, v));
-                                  case ColumnType.tags:
-                                    final ids = raw is List ? List<String>.from(raw) : <String>[];
-                                    return TagCell(selectedIds: ids, options: col.tagOptions, onChanged: (v) => svc.setCellValue(t.id, date, col.id, v));
-                                  case ColumnType.date:
-                                    return InkWell(borderRadius: BorderRadius.circular(8), onTap: () async { final d = await showDatePicker(context: context, initialDate: DateTime.now(), firstDate: DateTime(2020), lastDate: DateTime(2035)); if (d != null) svc.setCellValue(t.id, date, col.id, d.toIso8601String().split('T').first); }, child: Container(padding: const EdgeInsets.all(8), decoration: BoxDecoration(color: AppColors.inputFill, borderRadius: BorderRadius.circular(8), border: Border.all(color: AppColors.inputBorder)), child: Text(raw ?? 'pick date', style: const TextStyle(fontSize: 12, color: AppColors.textSecondary))));
-                                  case ColumnType.datetime:
-                                    return InkWell(borderRadius: BorderRadius.circular(8), onTap: () async { final d = await showDatePicker(context: context, initialDate: DateTime.now(), firstDate: DateTime(2020), lastDate: DateTime(2035)); if (d != null && context.mounted) { final tp = await showTimePicker(context: context, initialTime: TimeOfDay.now()); if (tp != null) svc.setCellValue(t.id, date, col.id, DateTime(d.year, d.month, d.day, tp.hour, tp.minute).toIso8601String()); } }, child: Container(padding: const EdgeInsets.all(8), decoration: BoxDecoration(color: AppColors.inputFill, borderRadius: BorderRadius.circular(8), border: Border.all(color: AppColors.inputBorder)), child: Text(raw ?? 'pick datetime', style: const TextStyle(fontSize: 11, color: AppColors.textSecondary))));
-                                }
-                              })
-                            ])),
-                        ]),
-                        // Dedicated note section — every task has a note
-                        Builder(builder: (_) {
-                          final noteCol = cols.where((c) => c.id == 'col_note').firstOrNull ?? cols.where((c) => c.type == ColumnType.text && c.label.toLowerCase().contains('note')).firstOrNull;
-                          if (noteCol == null) return const SizedBox.shrink();
-                          final noteVal = e?.valueFor(noteCol.id) as String? ?? '';
-                          return Padding(
-                            padding: const EdgeInsets.only(top: 12),
-                            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                              const Divider(color: AppColors.border, height: 1),
-                              const SizedBox(height: 8),
-                              const Row(children: [Icon(Icons.notes_rounded, size: 12, color: AppColors.textSecondary), SizedBox(width: 6), Text('Note', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: AppColors.textSecondary, letterSpacing: 0.4))]),
-                              const SizedBox(height: 6),
-                              TextFormField(
-                                initialValue: noteVal,
-                                maxLines: 3,
-                                minLines: 2,
-                                style: const TextStyle(fontSize: 12, color: AppColors.textPrimary),
-                                decoration: InputDecoration(
-                                  hintText: 'Add a note for this task…',
-                                  hintStyle: const TextStyle(color: AppColors.textSecondary, fontSize: 11),
-                                  filled: true,
-                                  fillColor: AppColors.inputFill,
-                                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: const BorderSide(color: AppColors.inputBorder)),
-                                  contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                                ),
-                                onChanged: (v) => svc.setCellValue(t.id, date, noteCol.id, v.isEmpty ? null : v),
-                              ),
-                            ]),
-                          );
-                        })
-                      ])),
-                    );
+                    return _SquareTaskCard(task: t, date: date, checked: checked, cols: cols, entry: e);
                   },
                 ),
         ),
@@ -191,6 +213,136 @@ class _DailyViewState extends ConsumerState<DailyView> {
               FilledButton(onPressed: _rowPage < rowPages - 1 ? () => setState(() => _rowPage++) : null, child: const Text('Next')),
             ]),
           ),
+      ]),
+    );
+  }
+
+  Widget _statChip(IconData icon, String label, String value, Color color) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(color: AppColors.inputFill, borderRadius: BorderRadius.circular(8), border: Border.all(color: AppColors.border)),
+      child: Row(mainAxisSize: MainAxisSize.min, children: [
+        Icon(icon, size: 12, color: color),
+        const SizedBox(width: 6),
+        Text('$label: ', style: const TextStyle(fontSize: 11, color: AppColors.textSecondary)),
+        Text(value, style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: color)),
+      ]),
+    );
+  }
+}
+
+class _SquareTaskCard extends ConsumerWidget {
+  final dynamic task;
+  final DateTime date;
+  final bool checked;
+  final List<ColumnDefinition> cols;
+  final dynamic entry;
+  const _SquareTaskCard({required this.task, required this.date, required this.checked, required this.cols, required this.entry});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final svc = ref.watch(supabaseServiceProvider);
+    final statusCol = cols.where((c) => c.type == ColumnType.status).firstOrNull;
+    final statusVal = statusCol != null ? entry?.data[statusCol.id] as String? : null;
+    Color borderColor = AppColors.border;
+    if (statusVal == 'done') borderColor = const Color(0xFF22C55E).withValues(alpha: 0.6);
+    else if (statusVal == 'in_progress' || statusVal == 'in progress') borderColor = const Color(0xFFF59E0B).withValues(alpha: 0.6);
+    else if (statusVal == 'cancel') borderColor = const Color(0xFFF43F5E).withValues(alpha: 0.6);
+
+    return Container(
+      decoration: BoxDecoration(color: AppColors.surface, borderRadius: BorderRadius.circular(12), border: Border.all(color: borderColor, width: 1.2), boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.18), blurRadius: 8, offset: const Offset(0, 2))]),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+        // header
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+          decoration: const BoxDecoration(color: AppColors.header, borderRadius: BorderRadius.vertical(top: Radius.circular(12))),
+          child: Row(children: [
+            Checkbox(value: checked, onChanged: (v) => svc.toggleChecked(task.id, date, v ?? false), visualDensity: VisualDensity.compact, materialTapTargetSize: MaterialTapTargetSize.shrinkWrap),
+            const SizedBox(width: 4),
+            Expanded(child: Text(task.name.isEmpty ? 'Untitled' : task.name, style: const TextStyle(fontWeight: FontWeight.w700, color: AppColors.textPrimary, fontSize: 13), overflow: TextOverflow.ellipsis)),
+            PopupMenuButton(
+              color: AppColors.surface,
+              icon: const Icon(Icons.more_horiz, size: 16, color: AppColors.textSecondary),
+              onSelected: (v) {
+                if (v == 'rename') {
+                  final c = TextEditingController(text: task.name);
+                  showDialog(context: context, builder: (_) => AlertDialog(backgroundColor: AppColors.surface, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8), side: const BorderSide(color: AppColors.border)), title: const Text('Rename', style: TextStyle(color: AppColors.textPrimary)), content: TextField(controller: c, style: const TextStyle(color: AppColors.textPrimary), decoration: const InputDecoration(border: OutlineInputBorder())), actions: [TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')), FilledButton(onPressed: () { svc.updateTask(task.copyWith(name: c.text)); Navigator.pop(context); }, child: const Text('Save'))]));
+                }
+                if (v == 'delete') svc.deleteTask(task.id);
+              },
+              itemBuilder: (_) => const [PopupMenuItem(value: 'rename', child: Text('Rename')), PopupMenuItem(value: 'delete', child: Text('Delete'))],
+            ),
+          ]),
+        ),
+        const Divider(height: 1, color: AppColors.border),
+        Expanded(
+          child: Padding(
+            padding: const EdgeInsets.all(10),
+            child: Column(children: [
+              Expanded(
+                child: GridView.builder(
+                  physics: const NeverScrollableScrollPhysics(),
+                  gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(crossAxisCount: cols.length == 1 ? 1 : 2, crossAxisSpacing: 8, mainAxisSpacing: 8, childAspectRatio: cols.length == 1 ? 4 : 3.2),
+                  itemCount: cols.length,
+                  itemBuilder: (_, idx) {
+                    final col = cols[idx];
+                    final raw = entry?.data[col.id];
+                    Widget child;
+                    switch (col.type) {
+                      case ColumnType.schedule:
+                        child = ScheduleCell(value: raw as String?, onChanged: (v) => svc.setCellValue(task.id, date, col.id, v));
+                        break;
+                      case ColumnType.status:
+                        child = StatusCell(valueId: raw as String?, options: col.statusOptions, onChanged: (v) => svc.setCellValue(task.id, date, col.id, v));
+                        break;
+                      case ColumnType.number:
+                      case ColumnType.text:
+                        child = DurationCell(value: raw as String?, onChanged: (v) => svc.setCellValue(task.id, date, col.id, v));
+                        break;
+                      case ColumnType.timer:
+                        child = TimerCell(taskId: task.id, date: date, columnId: col.id, rawValue: raw);
+                        break;
+                      case ColumnType.checkbox:
+                        child = Align(alignment: Alignment.centerLeft, child: Checkbox(value: raw == true, onChanged: (v) => svc.setCellValue(task.id, date, col.id, v), visualDensity: VisualDensity.compact));
+                        break;
+                      case ColumnType.tags:
+                        final ids = raw is List ? List<String>.from(raw) : <String>[];
+                        child = TagCell(selectedIds: ids, options: col.tagOptions, onChanged: (v) => svc.setCellValue(task.id, date, col.id, v));
+                        break;
+                      case ColumnType.date:
+                        child = InkWell(borderRadius: BorderRadius.circular(8), onTap: () async { final d = await showDatePicker(context: context, initialDate: DateTime.now(), firstDate: DateTime(2020), lastDate: DateTime(2035)); if (d != null) svc.setCellValue(task.id, date, col.id, d.toIso8601String().split('T').first); }, child: Container(padding: const EdgeInsets.all(6), decoration: BoxDecoration(color: AppColors.inputFill, borderRadius: BorderRadius.circular(8), border: Border.all(color: AppColors.inputBorder)), child: Text(raw ?? '—', style: const TextStyle(fontSize: 11, color: AppColors.textSecondary))));
+                        break;
+                      case ColumnType.datetime:
+                        child = InkWell(borderRadius: BorderRadius.circular(8), onTap: () async { final d = await showDatePicker(context: context, initialDate: DateTime.now(), firstDate: DateTime(2020), lastDate: DateTime(2035)); if (d != null && context.mounted) { final tp = await showTimePicker(context: context, initialTime: TimeOfDay.now()); if (tp != null) svc.setCellValue(task.id, date, col.id, DateTime(d.year, d.month, d.day, tp.hour, tp.minute).toIso8601String()); } }, child: Container(padding: const EdgeInsets.all(6), decoration: BoxDecoration(color: AppColors.inputFill, borderRadius: BorderRadius.circular(8), border: Border.all(color: AppColors.inputBorder)), child: Text(raw != null ? raw.toString().substring(0, 16) : '—', style: const TextStyle(fontSize: 10, color: AppColors.textSecondary))));
+                    }
+                    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                      Text(col.label, style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: AppColors.textSecondary, letterSpacing: 0.3)),
+                      const SizedBox(height: 4),
+                      Expanded(child: child),
+                    ]);
+                  },
+                ),
+              ),
+              // note preview at bottom of square
+              Builder(builder: (_) {
+                final noteCol = cols.where((c) => c.id == 'col_note').firstOrNull ?? cols.where((c) => c.type == ColumnType.text && c.label.toLowerCase().contains('note')).firstOrNull;
+                if (noteCol == null) return const SizedBox.shrink();
+                final noteVal = entry?.data[noteCol.id] as String? ?? '';
+                if (noteVal.trim().isEmpty) return const SizedBox.shrink();
+                return Container(
+                  margin: const EdgeInsets.only(top: 8),
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                  decoration: BoxDecoration(color: AppColors.inputFill, borderRadius: BorderRadius.circular(8), border: Border.all(color: AppColors.border)),
+                  child: Row(children: [
+                    const Icon(Icons.notes_rounded, size: 10, color: AppColors.textSecondary),
+                    const SizedBox(width: 4),
+                    Expanded(child: Text(noteVal, style: const TextStyle(fontSize: 10, color: AppColors.textSecondary), maxLines: 1, overflow: TextOverflow.ellipsis)),
+                  ]),
+                );
+              }),
+            ]),
+          ),
+        ),
       ]),
     );
   }
