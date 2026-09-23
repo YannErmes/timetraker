@@ -5,82 +5,113 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:uuid/uuid.dart';
 import '../config/supabase_config.dart';
 
-const _kNameKey = 'tracker_name';
+const _kNameKey = 'tracker_name'; // kept for backward compat, now stores email
+const _kEmailKey = 'tracker_email';
 const _kIdKey = 'tracker_user_id';
+const _kVipKey = 'tracker_vip_key';
 const _uuid = Uuid();
 
 class Identity {
-  final String id; // uuid, stable per name
-  final String name;
-  const Identity({required this.id, required this.name});
+  final String id; // uuid, stable per email
+  final String name; // email (kept as name for compat)
+  final String? vipKey;
+  final bool isVip;
+  const Identity({required this.id, required this.name, this.vipKey, this.isVip = false});
+  String get email => name;
+}
+
+bool isValidVipKey(String key) {
+  final s = key.toLowerCase().trim();
+  if (s.isEmpty) return false;
+  final yIdx = s.indexOf('y');
+  if (yIdx == -1) return false;
+  // no 'a' before the y used for the sequence
+  if (s.substring(0, yIdx).contains('a')) return false;
+  final aIdx = s.indexOf('a', yIdx + 1);
+  if (aIdx == -1) return false;
+  final n1 = s.indexOf('n', aIdx + 1);
+  if (n1 == -1) return false;
+  final n2 = s.indexOf('n', n1 + 1);
+  if (n2 == -1) return false;
+  return true;
 }
 
 class IdentityService {
   Identity? _identity;
   Identity? get identity => _identity;
   String? get userId => _identity?.id;
-  String? get name => _identity?.name;
+  String? get name => _identity?.name; // email stored as name for compat
+  String? get email => _identity?.name;
   bool get isLoggedIn => _identity != null;
+  bool get isVipUnlocked => _identity?.isVip ?? false;
+  String? get vipKey => _identity?.vipKey;
 
   final _controller = StreamController<Identity?>.broadcast();
   Stream<Identity?> get stream => _controller.stream;
 
   Future<void> init() async {
     final prefs = await SharedPreferences.getInstance();
-    final storedName = prefs.getString(_kNameKey);
+    // support both old _kNameKey and new _kEmailKey (email is now the identity)
+    final storedEmail = prefs.getString(_kEmailKey) ?? prefs.getString(_kNameKey);
     final storedId = prefs.getString(_kIdKey);
-    if (storedName != null && storedId != null && storedName.trim().isNotEmpty) {
-      _identity = Identity(id: storedId, name: storedName);
+    final storedVip = prefs.getString(_kVipKey);
+    final isVip = storedVip != null && isValidVipKey(storedVip);
+    if (storedEmail != null && storedId != null && storedEmail.trim().isNotEmpty) {
+      _identity = Identity(id: storedId, name: storedEmail, vipKey: storedVip, isVip: isVip);
       _controller.add(_identity);
-      // try to ensure remote record exists (best-effort, no block)
       if (isSupabaseConfigured) {
-        unawaited(_ensureRemote(storedName, storedId));
+        unawaited(_ensureRemote(storedEmail, storedId));
       }
     }
   }
 
-  Future<Identity> signInWithName(String rawName) async {
+  // email + optional vip
+  Future<Identity> signInWithEmail(String rawEmail, {String? vipKey}) async {
+    final email = rawEmail.trim();
+    if (email.isEmpty) throw ArgumentError('Email is required');
+    if (!email.contains('@') || !email.contains('.')) throw ArgumentError('Enter a valid email address');
+    if (vipKey != null && vipKey.trim().isNotEmpty && !isValidVipKey(vipKey.trim())) {
+      throw ArgumentError('VIP key is not valid — it must contain y → a → n → n in order and no a before the y');
+    }
+    return signInWithName(email, vipKey: vipKey);
+  }
+
+  Future<Identity> signInWithName(String rawName, {String? vipKey}) async {
     final name = rawName.trim();
-    if (name.isEmpty) throw ArgumentError('Name is required');
-    // Basic validation: 2-32 chars
-    if (name.length < 2) throw ArgumentError('Name must be at least 2 characters');
-    if (name.length > 32) throw ArgumentError('Name must be 32 characters or less');
+    if (name.isEmpty) throw ArgumentError('Email is required');
+    // allow email format, but keep old 2-64 validation for backward compat
+    if (name.length < 3) throw ArgumentError('Enter a valid email');
+    if (name.length > 64) throw ArgumentError('Email must be 64 characters or less');
 
     String id;
-    String canonicalName = name; // keep exact typing as the key
+    String canonicalName = name; // keep exact typing as the key (email case-sensitive per spec)
+    final normalizedVip = vipKey?.trim();
+    final vipValid = normalizedVip != null && normalizedVip.isNotEmpty && isValidVipKey(normalizedVip);
 
     if (isSupabaseConfigured) {
       try {
         final client = Supabase.instance.client;
-        // Try to reclaim by exact name
         final existing = await client.from('app_users').select().eq('name', canonicalName).maybeSingle();
         if (existing != null) {
           id = existing['id'] as String;
         } else {
-          // create new
           id = _uuid.v4();
           await client.from('app_users').insert({'id': id, 'name': canonicalName});
         }
       } catch (e) {
-        // if table missing or offline, fallback to local deterministic id
         debugPrint('identity supabase error: $e');
-        // try local reclaim via stored prefs id if same name, else generate
         final prefs = await SharedPreferences.getInstance();
-        final storedName = prefs.getString(_kNameKey);
+        final storedName = prefs.getString(_kEmailKey) ?? prefs.getString(_kNameKey);
         final storedId = prefs.getString(_kIdKey);
         if (storedName == canonicalName && storedId != null) {
           id = storedId;
         } else {
           id = _uuid.v4();
-          // queue for later sync? store and let next online ensureRemote will create
-          // we still need to ensure remote eventually, will be retried on next init
         }
-        // still persist locally even if remote failed
       }
     } else {
-      // Demo / no supabase: try to reclaim locally if same name previously stored, else new id
       final prefs = await SharedPreferences.getInstance();
-      final storedName = prefs.getString(_kNameKey);
+      final storedName = prefs.getString(_kEmailKey) ?? prefs.getString(_kNameKey);
       final storedId = prefs.getString(_kIdKey);
       if (storedName == canonicalName && storedId != null) {
         id = storedId;
@@ -89,11 +120,20 @@ class IdentityService {
       }
     }
 
-    final ident = Identity(id: id, name: canonicalName);
+    final ident = Identity(id: id, name: canonicalName, vipKey: normalizedVip, isVip: vipValid);
     _identity = ident;
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_kNameKey, canonicalName);
+    await prefs.setString(_kEmailKey, canonicalName);
+    await prefs.setString(_kNameKey, canonicalName); // keep for compat
     await prefs.setString(_kIdKey, id);
+    if (normalizedVip != null) {
+      await prefs.setString(_kVipKey, normalizedVip);
+    } else {
+      // keep existing vip if not provided? For new login without vip, keep null to allow later addition
+      // don't remove existing vip unless explicitly cleared
+      if (vipKey != null) await prefs.remove(_kVipKey);
+    }
+    // also store vip valid flag implicitly via isValid check
     _controller.add(ident);
 
     if (isSupabaseConfigured) {
@@ -102,11 +142,35 @@ class IdentityService {
     return ident;
   }
 
+  Future<void> setVipKey(String rawKey) async {
+    final key = rawKey.trim();
+    if (key.isNotEmpty && !isValidVipKey(key)) {
+      throw ArgumentError('VIP key is not valid — it must contain y → a → n → n in order and no a before the y (e.g. qtwuykdhakdjfnkdien works, sdfhsajdfyaiifjoniden does not)');
+    }
+    final prefs = await SharedPreferences.getInstance();
+    if (key.isEmpty) {
+      await prefs.remove(_kVipKey);
+    } else {
+      await prefs.setString(_kVipKey, key);
+    }
+    if (_identity != null) {
+      _identity = Identity(id: _identity!.id, name: _identity!.name, vipKey: key.isEmpty ? null : key, isVip: isValidVipKey(key));
+      _controller.add(_identity);
+    }
+  }
+
+  Future<String?> getStoredVipKey() async {
+    final p = await SharedPreferences.getInstance();
+    return p.getString(_kVipKey);
+  }
+
   Future<void> signOut() async {
-    // clear local identity; data remains on server under that name/id for reclaim
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove(_kNameKey);
+    await prefs.remove(_kEmailKey);
     await prefs.remove(_kIdKey);
+    // keep VIP key? The VIP is per-install, not per-user, so keep it. If you want to clear it on sign out, uncomment:
+    // await prefs.remove(_kVipKey);
     _identity = null;
     _controller.add(null);
   }

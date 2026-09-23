@@ -7,9 +7,11 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../config/google_config.dart';
 import '../models/task.dart';
 import '../models/day_entry.dart';
+import 'identity_service.dart';
 
 const _kAutoSyncKey = 'google_auto_sync';
 const _kGoogleEventPrefix = '__gcal_event_id_';
+const _kVipKey = 'tracker_vip_key';
 
 class GoogleCalendarService {
   static final GoogleSignIn _googleSignIn = GoogleSignIn(
@@ -33,18 +35,31 @@ class GoogleCalendarService {
     return acc?.email;
   }
 
+  Future<bool> isVipUnlocked() async {
+    final prefs = await SharedPreferences.getInstance();
+    final key = prefs.getString(_kVipKey);
+    return key != null && isValidVipKey(key);
+  }
+
   Future<bool> isAutoSyncEnabled() async {
+    if (!await isVipUnlocked()) return false;
     final prefs = await SharedPreferences.getInstance();
     return prefs.getBool(_kAutoSyncKey) ?? false;
   }
 
   Future<void> setAutoSync(bool v) async {
+    if (v && !await isVipUnlocked()) {
+      throw Exception('VIP key required for Google Calendar sync');
+    }
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool(_kAutoSyncKey, v);
   }
 
   /// Step 1: user puts email implicitly via Google picker -> consent
   Future<GoogleSignInAccount?> connect() async {
+    if (!await isVipUnlocked()) {
+      throw Exception('VIP key required — enter a valid VIP key (must contain y → a → n → n in order, no a before y)');
+    }
     try {
       final acc = await _googleSignIn.signIn();
       if (acc != null) {

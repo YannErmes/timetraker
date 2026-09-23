@@ -10,22 +10,22 @@ class AuthScreen extends ConsumerStatefulWidget {
 }
 
 class _AuthScreenState extends ConsumerState<AuthScreen> {
-  final _nameCtrl = TextEditingController();
+  final _emailCtrl = TextEditingController();
+  final _vipCtrl = TextEditingController();
   bool _loading = false;
   String? _error;
 
   Future<void> _submit() async {
-    final name = _nameCtrl.text.trim();
-    if (name.isEmpty || name.length < 2) {
-      setState(() => _error = 'Please enter at least 2 characters.');
+    final email = _emailCtrl.text.trim();
+    final vip = _vipCtrl.text.trim();
+    if (email.isEmpty || !email.contains('@')) {
+      setState(() => _error = 'Please enter a valid email address.');
       return;
     }
     setState(() { _loading = true; _error = null; });
     try {
       final identity = ref.read(identityServiceProvider);
-      await identity.signInWithName(name);
-      // SupabaseService will auto-recreate via provider watch and init with new id
-      // trigger a manual init for current svc if needed
+      await identity.signInWithEmail(email, vipKey: vip.isEmpty ? null : vip);
       final svc = ref.read(supabaseServiceProvider);
       await svc.init();
     } catch (e) {
@@ -37,7 +37,8 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
 
   @override
   void dispose() {
-    _nameCtrl.dispose();
+    _emailCtrl.dispose();
+    _vipCtrl.dispose();
     super.dispose();
   }
 
@@ -59,13 +60,26 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
                 const SizedBox(height: 12),
                 const Text('Welcome to Tracker Sheet', style: TextStyle(color: AppColors.textPrimary, fontSize: 20, fontWeight: FontWeight.w700)),
                 const SizedBox(height: 8),
-                const Text('Enter your name to continue. We’ll create your workspace instantly — no password needed.', style: TextStyle(color: AppColors.textSecondary, fontSize: 12), textAlign: TextAlign.center),
+                const Text('Enter your email to continue. We’ll create your workspace instantly — no password needed.', style: TextStyle(color: AppColors.textSecondary, fontSize: 12), textAlign: TextAlign.center),
                 const SizedBox(height: 16),
                 TextField(
-                  controller: _nameCtrl,
+                  controller: _emailCtrl,
                   style: const TextStyle(color: AppColors.textPrimary),
-                  decoration: const InputDecoration(labelText: 'Your name', hintText: 'e.g. Alex', prefixIcon: Icon(Icons.badge_outlined, size: 18)),
-                  textCapitalization: TextCapitalization.words,
+                  decoration: const InputDecoration(labelText: 'Email address *', hintText: 'e.g. alex@example.com', prefixIcon: Icon(Icons.email_outlined, size: 18)),
+                  keyboardType: TextInputType.emailAddress,
+                  onSubmitted: (_) => _submit(),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: _vipCtrl,
+                  style: const TextStyle(color: AppColors.textPrimary, fontSize: 13),
+                  decoration: const InputDecoration(
+                    labelText: 'VIP key for Google Calendar (optional)',
+                    hintText: 'e.g. qtwuykdhakdjfnkdien',
+                    prefixIcon: Icon(Icons.workspace_premium_outlined, size: 18),
+                    helperText: 'Must contain y → a → n → n in order, no a before the y. e.g. qtwuyk... works, sdfhsajdfy... does not',
+                    helperStyle: TextStyle(fontSize: 10, color: AppColors.textSecondary),
+                  ),
                   onSubmitted: (_) => _submit(),
                 ),
                 const SizedBox(height: 8),
@@ -75,7 +89,7 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
                   child: Row(children: const [
                     Icon(Icons.info_outline, size: 14, color: AppColors.textSecondary),
                     SizedBox(width: 8),
-                    Expanded(child: Text('your name is your only key to your data — remember exactly how you typed it', style: TextStyle(fontSize: 11, color: AppColors.textSecondary, fontStyle: FontStyle.italic))),
+                    Expanded(child: Text('your email is your only key to your data — remember exactly how you typed it', style: TextStyle(fontSize: 11, color: AppColors.textSecondary, fontStyle: FontStyle.italic))),
                   ]),
                 ),
                 if (_error != null) ...[

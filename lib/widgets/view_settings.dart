@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../config/app_colors.dart';
+import '../providers/app_providers.dart';
 import '../providers/display_prefs.dart';
 import '../services/google_calendar_service.dart';
 import 'column_visibility_bar.dart';
@@ -84,17 +85,19 @@ class _DensityDialog extends ConsumerWidget {
   }
 }
 
-class _GoogleCalendarSection extends StatefulWidget {
+class _GoogleCalendarSection extends ConsumerStatefulWidget {
   const _GoogleCalendarSection();
   @override
-  State<_GoogleCalendarSection> createState() => _GoogleCalendarSectionState();
+  ConsumerState<_GoogleCalendarSection> createState() => _GoogleCalendarSectionState();
 }
 
-class _GoogleCalendarSectionState extends State<_GoogleCalendarSection> {
+class _GoogleCalendarSectionState extends ConsumerState<_GoogleCalendarSection> {
   bool _autoSync = false;
   String? _email;
   bool _connected = false;
   bool _loading = true;
+  bool _isVip = false;
+  final _vipCtrl = TextEditingController();
 
   @override
   void initState() {
@@ -102,16 +105,69 @@ class _GoogleCalendarSectionState extends State<_GoogleCalendarSection> {
     _load();
   }
 
+  @override
+  void dispose() {
+    _vipCtrl.dispose();
+    super.dispose();
+  }
+
   Future<void> _load() async {
     final connected = await GoogleCalendarService.instance.isConnected();
     final email = await GoogleCalendarService.instance.getConnectedEmail();
     final auto = await GoogleCalendarService.instance.isAutoSyncEnabled();
-    if (mounted) setState(() { _connected = connected; _email = email; _autoSync = auto; _loading = false; });
+    final vip = ref.read(identityServiceProvider).isVipUnlocked;
+    if (mounted) setState(() { _connected = connected; _email = email; _autoSync = auto; _isVip = vip; _loading = false; });
   }
 
   @override
   Widget build(BuildContext context) {
     if (_loading) return const SizedBox(height: 40, child: Center(child: CircularProgressIndicator(strokeWidth: 2)));
+    // Gate behind VIP
+    if (!_isVip) {
+      return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        const Row(children: [Icon(Icons.calendar_today_rounded, size: 14, color: AppColors.textSecondary), SizedBox(width: 6), Text('Google Calendar sync', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: AppColors.textSecondary))]),
+        const SizedBox(height: 4),
+        Container(
+          padding: const EdgeInsets.all(10),
+          decoration: BoxDecoration(color: AppColors.inputFill, borderRadius: BorderRadius.circular(8), border: Border.all(color: AppColors.border)),
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            const Row(children: [Icon(Icons.lock_rounded, size: 14, color: AppColors.textSecondary), SizedBox(width: 6), Text('VIP required', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: AppColors.textPrimary))]),
+            const SizedBox(height: 4),
+            const Text('Enter your VIP key to unlock Google Calendar sync. The key must contain y → a → n → n in order and must not have an a before the y. Example: qtwuykdhakdjfnkdien works, sdfhsajdfyaiifjoniden does not (a before y).', style: TextStyle(fontSize: 10, color: AppColors.textSecondary)),
+            const SizedBox(height: 8),
+            TextField(
+              controller: _vipCtrl,
+              style: const TextStyle(color: AppColors.textPrimary, fontSize: 12),
+              decoration: const InputDecoration(labelText: 'VIP key', hintText: 'paste your key', prefixIcon: Icon(Icons.workspace_premium_outlined, size: 16)),
+            ),
+            const SizedBox(height: 8),
+            SizedBox(
+              width: double.infinity,
+              child: FilledButton.icon(
+                icon: const Icon(Icons.lock_open_rounded, size: 14),
+                label: const Text('Unlock'),
+                onPressed: () async {
+                  final key = _vipCtrl.text.trim();
+                  if (key.isEmpty) {
+                    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Enter a VIP key')));
+                    return;
+                  }
+                  try {
+                    await ref.read(identityServiceProvider).setVipKey(key);
+                    await _load();
+                    if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('VIP key saved — Google sync unlocked!')));
+                  } catch (e) {
+                    if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Invalid VIP key: $e')));
+                  }
+                },
+              ),
+            ),
+            const SizedBox(height: 4),
+            const Text('You can add the VIP key later in Settings. Without it, the sync options stay grayed out.', style: TextStyle(fontSize: 10, color: AppColors.textSecondary)),
+          ]),
+        ),
+      ]);
+    }
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
       const Row(children: [Icon(Icons.calendar_today_rounded, size: 14, color: AppColors.accent), SizedBox(width: 6), Text('Google Calendar sync', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: AppColors.textPrimary))]),
       const SizedBox(height: 4),
