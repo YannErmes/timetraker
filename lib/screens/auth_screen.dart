@@ -26,8 +26,7 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
     try {
       final identity = ref.read(identityServiceProvider);
       await identity.signInWithEmail(email, vipKey: vip.isEmpty ? null : vip);
-      final svc = ref.read(supabaseServiceProvider);
-      await svc.init();
+      // SupabaseService will auto-recreate and init via provider watch — no manual reload needed
     } catch (e) {
       setState(() => _error = e.toString().replaceAll('Exception: ', '').replaceAll('ArgumentError: ', ''));
     } finally {

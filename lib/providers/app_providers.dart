@@ -5,9 +5,13 @@ import '../services/supabase_service.dart';
 final identityServiceProvider = Provider<IdentityService>((ref) {
   final s = IdentityService();
   ref.onDispose(() => s.dispose());
-  // kick off async init, but caller should await
   s.init();
   return s;
+});
+
+final identityStreamProvider = StreamProvider<Identity?>((ref) {
+  final svc = ref.watch(identityServiceProvider);
+  return svc.stream;
 });
 
 final supabaseServiceProvider = Provider<SupabaseService>((ref) {

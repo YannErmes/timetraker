@@ -34,9 +34,10 @@ class _TrackerAppState extends ConsumerState<TrackerApp> {
         home: const Scaffold(body: Center(child: CircularProgressIndicator())),
       );
     }
+    // Watch stream so UI switches instantly after Continue without reload
+    final identityAsync = ref.watch(identityStreamProvider);
     final identity = ref.watch(identityServiceProvider);
-    final loggedIn = identity.isLoggedIn;
-    // also watch svc to rebuild when data changes, but routing is based on identity
+    final loggedIn = identityAsync.maybeWhen(data: (ident) => ident != null, orElse: () => identity.isLoggedIn);
     ref.watch(supabaseServiceProvider);
     return MaterialApp(
       title: 'Tracker Sheet',
