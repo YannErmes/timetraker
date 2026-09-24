@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:tracker_sheet/l10n/app_localizations.dart';
 import 'package:uuid/uuid.dart';
 import '../config/app_colors.dart';
 import '../providers/app_providers.dart';
@@ -18,28 +19,29 @@ class ColumnSettingsPanel extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final svc = ref.watch(supabaseServiceProvider);
     ref.watch(columnsProvider);
+    final t = AppLocalizations.of(context)!;
     final cols = List.of(svc.columns)..sort((a, b) => a.position.compareTo(b.position));
     return Drawer(
       backgroundColor: AppColors.surface,
       width: 380,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.zero, side: BorderSide(color: AppColors.border)),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.zero, side: BorderSide(color: AppColors.border)),
       child: SafeArea(
         child: Column(children: [
           Container(
             color: AppColors.header,
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
             child: Row(children: [
-              const Icon(Icons.view_column, size: 18, color: AppColors.textPrimary),
+              Icon(Icons.view_column, size: 18, color: AppColors.textPrimary),
               const SizedBox(width: 8),
-              const Text('Manage Columns', style: TextStyle(color: AppColors.textPrimary, fontWeight: FontWeight.w700)),
+              Text(t.manageColsTitle, style: TextStyle(color: AppColors.textPrimary, fontWeight: FontWeight.w700)),
               const Spacer(),
-              FilledButton.icon(onPressed: () => _addColumn(context, ref), icon: const Icon(Icons.add, size: 14), label: const Text('Add')),
+              FilledButton.icon(onPressed: () => _addColumn(context, ref), icon: const Icon(Icons.add, size: 14), label: Text(t.add)),
             ]),
           ),
-          const Divider(height: 1, color: AppColors.border),
-          const Padding(
+          Divider(height: 1, color: AppColors.border),
+          Padding(
             padding: EdgeInsets.all(10),
-            child: Text('Add, rename, delete, reorder, and change type. Changing type keeps the column but clears or converts existing values (best-effort).', style: TextStyle(fontSize: 11, color: AppColors.textSecondary)),
+            child: Text(t.introText, style: TextStyle(fontSize: 11, color: AppColors.textSecondary)),
           ),
           Expanded(
             child: ReorderableListView.builder(
@@ -56,34 +58,34 @@ class ColumnSettingsPanel extends ConsumerWidget {
                     decoration: BoxDecoration(color: hidden ? AppColors.bg : AppColors.inputFill, borderRadius: BorderRadius.circular(8), border: Border.all(color: hidden ? AppColors.border.withValues(alpha: 0.6) : AppColors.border)),
                     child: ListTile(
                       leading: Row(mainAxisSize: MainAxisSize.min, children: [
-                        const Icon(Icons.drag_handle, size: 14, color: AppColors.textSecondary),
+                        Icon(Icons.drag_handle, size: 14, color: AppColors.textSecondary),
                         const SizedBox(width: 8),
                         Icon(c.type.icon, size: 16, color: hidden ? AppColors.textSecondary : AppColors.accent),
                       ]),
                       title: Row(children: [
                         Expanded(child: Text(c.label, style: TextStyle(color: hidden ? AppColors.textSecondary : AppColors.textPrimary, fontSize: 13, fontWeight: FontWeight.w600, decoration: hidden ? TextDecoration.lineThrough : null))),
-                        if (hidden) Container(margin: const EdgeInsets.only(left: 6), padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2), decoration: BoxDecoration(color: AppColors.inputFill, borderRadius: BorderRadius.circular(8), border: Border.all(color: AppColors.border)), child: const Text('hidden', style: TextStyle(fontSize: 9, color: AppColors.textSecondary))),
+                        if (hidden) Container(margin: EdgeInsets.only(left: 6), padding: EdgeInsets.symmetric(horizontal: 6, vertical: 2), decoration: BoxDecoration(color: AppColors.inputFill, borderRadius: BorderRadius.circular(8), border: Border.all(color: AppColors.border)), child: Text(t.hiddenBadge, style: TextStyle(fontSize: 9, color: AppColors.textSecondary))),
                       ]),
                       subtitle: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                        Text('${c.type.label} · ${c.type.description}', style: const TextStyle(fontSize: 10, color: AppColors.textSecondary)),
+                        Text('${c.type.labelL(t)} · ${c.type.descL(t)}', style: TextStyle(fontSize: 10, color: AppColors.textSecondary)),
                         if (c.type == ColumnType.status)
                           Padding(
                             padding: const EdgeInsets.only(top: 4),
-                            child: Wrap(spacing: 4, runSpacing: 2, children: c.statusOptions.map((o) => Container(padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2), decoration: BoxDecoration(color: _hex(o.colorHex).withValues(alpha: 0.18), borderRadius: BorderRadius.circular(8), border: Border.all(color: _hex(o.colorHex).withValues(alpha: 0.5))), child: Text(o.label, style: const TextStyle(fontSize: 10, color: AppColors.textPrimary)))).toList()),
+                            child: Wrap(spacing: 4, runSpacing: 2, children: c.statusOptions.map((o) => Container(padding: EdgeInsets.symmetric(horizontal: 6, vertical: 2), decoration: BoxDecoration(color: _hex(o.colorHex).withValues(alpha: 0.18), borderRadius: BorderRadius.circular(8), border: Border.all(color: _hex(o.colorHex).withValues(alpha: 0.5))), child: Text(o.label, style: TextStyle(fontSize: 10, color: AppColors.textPrimary)))).toList()),
                           ),
                       ]),
                       trailing: Row(mainAxisSize: MainAxisSize.min, children: [
                         IconButton(
-                          tooltip: hidden ? 'Show' : 'Hide',
+                          tooltip: hidden ? t.showCol : t.hideCol,
                           icon: Icon(hidden ? Icons.visibility_off_outlined : Icons.visibility_outlined, size: 16, color: hidden ? AppColors.textSecondary : AppColors.accent),
                           onPressed: () => ref.read(columnVisibilityProvider.notifier).toggle(c.id),
                         ),
                         PopupMenuButton(
                           color: AppColors.surface,
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8), side: const BorderSide(color: AppColors.border)),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8), side: BorderSide(color: AppColors.border)),
                           onSelected: (v) { if (v == 'edit') _editColumn(context, ref, c); if (v == 'del') _confirmDelete(context, ref, c); if (v == 'toggle') ref.read(columnVisibilityProvider.notifier).toggle(c.id); },
-                          itemBuilder: (_) => [PopupMenuItem(value: 'edit', child: const Text('Edit / Change type')), PopupMenuItem(value: 'toggle', child: Text(hidden ? 'Show column' : 'Hide column')), const PopupMenuItem(value: 'del', child: Text('Delete'))],
-                          icon: const Icon(Icons.more_horiz, size: 16, color: AppColors.textSecondary),
+                          itemBuilder: (_) => [PopupMenuItem(value: 'edit', child: Text(t.editTypeItem)), PopupMenuItem(value: 'toggle', child: Text(hidden ? t.showCol : t.hideCol)), PopupMenuItem(value: 'del', child: Text(t.delete))],
+                          icon: Icon(Icons.more_horiz, size: 16, color: AppColors.textSecondary),
                         ),
                       ]),
                     ),
@@ -94,8 +96,8 @@ class ColumnSettingsPanel extends ConsumerWidget {
           ),
           Container(
             padding: const EdgeInsets.all(12),
-            decoration: const BoxDecoration(border: Border(top: BorderSide(color: AppColors.border))),
-            child: const Text('Drag handle to reorder. Columns appear as sub-columns per day in Weekly view. Type changes preserve the column ID.', style: TextStyle(fontSize: 11, color: AppColors.textSecondary)),
+            decoration: BoxDecoration(border: Border(top: BorderSide(color: AppColors.border))),
+            child: Text(t.footerDragHelp, style: TextStyle(fontSize: 11, color: AppColors.textSecondary)),
           )
         ]),
       ),
@@ -105,12 +107,13 @@ class ColumnSettingsPanel extends ConsumerWidget {
   void _addColumn(BuildContext context, WidgetRef ref) => showDialog(context: context, builder: (_) => _ColumnEditDialog(existing: null));
   void _editColumn(BuildContext context, WidgetRef ref, ColumnDefinition c) => showDialog(context: context, builder: (_) => _ColumnEditDialog(existing: c));
   void _confirmDelete(BuildContext context, WidgetRef ref, ColumnDefinition c) {
+    final t = AppLocalizations.of(context)!;
     showDialog(context: context, builder: (_) => AlertDialog(
       backgroundColor: AppColors.surface,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8), side: const BorderSide(color: AppColors.border)),
-      title: const Text('Delete column?', style: TextStyle(color: AppColors.textPrimary)),
-      content: Text('Delete "${c.label}"? All values in this column will be removed.', style: const TextStyle(color: AppColors.textSecondary, fontSize: 13)),
-      actions: [TextButton(onPressed: ()=> Navigator.pop(context), child: const Text('Cancel')), FilledButton(onPressed: (){ ref.read(supabaseServiceProvider).deleteColumn(c.id); Navigator.pop(context); }, style: FilledButton.styleFrom(backgroundColor: AppColors.cancelFill, foregroundColor: AppColors.cancelText), child: const Text('Delete'))],
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8), side: BorderSide(color: AppColors.border)),
+      title: Text(t.deleteColTitle, style: TextStyle(color: AppColors.textPrimary)),
+      content: Text(t.deleteColBody(c.label), style: TextStyle(color: AppColors.textSecondary, fontSize: 13)),
+      actions: [TextButton(onPressed: ()=> Navigator.pop(context), child: Text(t.cancel)), FilledButton(onPressed: (){ ref.read(supabaseServiceProvider).deleteColumn(c.id); Navigator.pop(context); }, style: FilledButton.styleFrom(backgroundColor: AppColors.cancelFill, foregroundColor: AppColors.cancelText), child: Text(t.delete))],
     ));
   }
 }
@@ -158,27 +161,28 @@ class _ColumnEditDialogState extends ConsumerState<_ColumnEditDialog> {
     final isNew = widget.existing == null;
     final originalType = widget.existing?.type;
     final typeChanged = originalType != null && originalType != _type;
+    final t = AppLocalizations.of(context)!;
     return AlertDialog(
       backgroundColor: AppColors.surface,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8), side: const BorderSide(color: AppColors.border)),
-      title: Text(isNew ? 'Add column' : 'Edit column', style: const TextStyle(color: AppColors.textPrimary)),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8), side: BorderSide(color: AppColors.border)),
+      title: Text(isNew ? t.addColTitle : t.editColTitle, style: TextStyle(color: AppColors.textPrimary)),
       content: SingleChildScrollView(
         child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-          TextField(controller: _label, style: const TextStyle(color: AppColors.textPrimary), decoration: const InputDecoration(labelText: 'Column name')),
+          TextField(controller: _label, style: TextStyle(color: AppColors.textPrimary), decoration: InputDecoration(labelText: t.colNameLbl)),
           const SizedBox(height: 12),
           DropdownButtonFormField<ColumnType>(
             value: _type,
             dropdownColor: AppColors.surface,
-            style: const TextStyle(color: AppColors.textPrimary, fontSize: 13),
-            decoration: const InputDecoration(labelText: 'Type'),
+            style: TextStyle(color: AppColors.textPrimary, fontSize: 13),
+            decoration: InputDecoration(labelText: t.typeLbl),
             isExpanded: true,
-            selectedItemBuilder: (c) => ColumnType.values.map((e) => Row(children: [Icon(e.icon, size: 16, color: AppColors.accent), const SizedBox(width: 8), Text(e.label)])).toList(),
+            selectedItemBuilder: (c) => ColumnType.values.map((e) => Row(children: [Icon(e.icon, size: 16, color: AppColors.accent), const SizedBox(width: 8), Text(e.labelL(t))])).toList(),
             items: ColumnType.values.map((e) => DropdownMenuItem(value: e, child: Row(children: [
               Icon(e.icon, size: 18, color: AppColors.accent),
               const SizedBox(width: 10),
               Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                Text(e.label, style: const TextStyle(color: AppColors.textPrimary, fontSize: 13, fontWeight: FontWeight.w600)),
-                Text(e.description, style: const TextStyle(color: AppColors.textSecondary, fontSize: 10)),
+                Text(e.labelL(t), style: TextStyle(color: AppColors.textPrimary, fontSize: 13, fontWeight: FontWeight.w600)),
+                Text(e.descL(t), style: TextStyle(color: AppColors.textSecondary, fontSize: 10)),
               ])),
             ]))).toList(),
             onChanged: (v) => setState(() => _type = v!),
@@ -186,9 +190,9 @@ class _ColumnEditDialogState extends ConsumerState<_ColumnEditDialog> {
           if (typeChanged) ...[
             const SizedBox(height: 8),
             Container(padding: const EdgeInsets.all(8), decoration: BoxDecoration(color: AppColors.inProgressFill, borderRadius: BorderRadius.circular(8), border: Border.all(color: AppColors.inProgressBorder)), child: Row(children: [
-              const Icon(Icons.warning_amber_rounded, size: 16, color: AppColors.inProgressBorder),
+              Icon(Icons.warning_amber_rounded, size: 16, color: AppColors.inProgressBorder),
               const SizedBox(width: 8),
-              Expanded(child: Text('Type will change from ${originalType.label} → ${_type.label}. Existing values will be cleared or best-effort converted.', style: const TextStyle(fontSize: 11, color: AppColors.inProgressText))),
+              Expanded(child: Text(t.typeChangedWarn(originalType.labelL(t), _type.labelL(t)), style: TextStyle(fontSize: 11, color: AppColors.inProgressText))),
             ])),
           ],
           if (isNew) ...[
@@ -197,9 +201,9 @@ class _ColumnEditDialogState extends ConsumerState<_ColumnEditDialog> {
               padding: const EdgeInsets.all(10),
               decoration: BoxDecoration(color: AppColors.inputFill, borderRadius: BorderRadius.circular(8), border: Border.all(color: AppColors.border)),
               child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                const Text('Insert position', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: AppColors.textPrimary)),
+                Text(t.insertPosition, style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: AppColors.textPrimary)),
                 const SizedBox(height: 4),
-                const Text('Choose where the new column appears. Works for any column type.', style: TextStyle(fontSize: 10, color: AppColors.textSecondary)),
+                Text(t.insertHelp, style: TextStyle(fontSize: 10, color: AppColors.textSecondary)),
                 const SizedBox(height: 8),
                 Builder(builder: (context) {
                   final svc = ref.watch(supabaseServiceProvider);
@@ -208,20 +212,20 @@ class _ColumnEditDialogState extends ConsumerState<_ColumnEditDialog> {
                     DropdownButtonFormField<String?>(
                       value: _anchorId,
                       dropdownColor: AppColors.surface,
-                      style: const TextStyle(color: AppColors.textPrimary, fontSize: 12),
-                      decoration: const InputDecoration(labelText: 'Anchor column', isDense: true),
+                      style: TextStyle(color: AppColors.textPrimary, fontSize: 12),
+                      decoration: InputDecoration(labelText: t.anchorLbl, isDense: true),
                       isExpanded: true,
                       items: [
-                        const DropdownMenuItem(value: '__begin', child: Text('At beginning (before all)')),
-                        const DropdownMenuItem(value: null, child: Text('At end (after all)')),
-                        ...sorted.map((c) => DropdownMenuItem(value: c.id, child: Text(c.label.isEmpty ? 'Untitled' : c.label, style: const TextStyle(fontSize: 12)))),
+                        DropdownMenuItem(value: '__begin', child: Text(t.atBeginning)),
+                        DropdownMenuItem(value: null, child: Text(t.atEnd)),
+                        ...sorted.map((c) => DropdownMenuItem(value: c.id, child: Text(c.label.isEmpty ? t.untitledCap : c.label, style: const TextStyle(fontSize: 12)))),
                       ],
                       onChanged: (v) => setState(() => _anchorId = v),
                     ),
                     if (_anchorId != null && _anchorId != '__begin') ...[
                       const SizedBox(height: 8),
                       SegmentedButton<bool>(
-                        segments: const [ButtonSegment(value: true, label: Text('Before'), icon: Icon(Icons.arrow_upward, size: 14)), ButtonSegment(value: false, label: Text('After'), icon: Icon(Icons.arrow_downward, size: 14))],
+                        segments: [ButtonSegment(value: true, label: Text(t.beforeBtn), icon: Icon(Icons.arrow_upward, size: 14)), ButtonSegment(value: false, label: Text(t.afterBtn), icon: Icon(Icons.arrow_downward, size: 14))],
                         selected: {_before},
                         onSelectionChanged: (s) => setState(() => _before = s.first),
                         style: ButtonStyle(visualDensity: VisualDensity.compact),
@@ -230,7 +234,7 @@ class _ColumnEditDialogState extends ConsumerState<_ColumnEditDialog> {
                     const SizedBox(height: 6),
                     Builder(builder: (_) {
                       final pos = _computedPos(sorted);
-                      return Text('Will be inserted at position ${pos + 1} of ${sorted.length + 1}', style: const TextStyle(fontSize: 11, color: AppColors.textSecondary));
+                      return Text(t.willInsert('${pos + 1}', '${sorted.length + 1}'), style: TextStyle(fontSize: 11, color: AppColors.textSecondary));
                     }),
                   ]);
                 }),
@@ -241,27 +245,27 @@ class _ColumnEditDialogState extends ConsumerState<_ColumnEditDialog> {
           if (_type == ColumnType.number)
             TextField(
               controller: TextEditingController(text: _unit),
-              style: const TextStyle(color: AppColors.textPrimary),
-              decoration: const InputDecoration(labelText: 'Unit (h, min, etc)', hintText: 'h'),
+              style: TextStyle(color: AppColors.textPrimary),
+              decoration: InputDecoration(labelText: t.unitLbl, hintText: t.unitHint),
               onChanged: (v) => _unit = v,
             ),
           if (_type == ColumnType.timer)
-            Container(padding: const EdgeInsets.all(8), decoration: BoxDecoration(color: AppColors.inputFill, borderRadius: BorderRadius.circular(8), border: Border.all(color: AppColors.border)), child: const Row(children: [Icon(Icons.hourglass_bottom_rounded, size: 16, color: AppColors.accent), SizedBox(width: 8), Expanded(child: Text('Time Length: cells store a duration (e.g. 4h) and a live countdown. Tap cell to set duration, then use timer controls.', style: TextStyle(fontSize: 11, color: AppColors.textSecondary)))])),
+            Container(padding: EdgeInsets.all(8), decoration: BoxDecoration(color: AppColors.inputFill, borderRadius: BorderRadius.circular(8), border: Border.all(color: AppColors.border)), child: Row(children: [Icon(Icons.hourglass_bottom_rounded, size: 16, color: AppColors.accent), SizedBox(width: 8), Expanded(child: Text(t.timerHelp, style: TextStyle(fontSize: 11, color: AppColors.textSecondary)))])),
           if (_type == ColumnType.status) ...[
-            const Align(alignment: Alignment.centerLeft, child: Text('Status options (label + color):', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.textSecondary))),
+            Align(alignment: Alignment.centerLeft, child: Text(t.statusOptsLbl, style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.textSecondary))),
             const SizedBox(height: 6),
             for (int i = 0; i < _statusOpts.length; i++)
               Card(
                 color: AppColors.inputFill,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8), side: const BorderSide(color: AppColors.border)),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8), side: BorderSide(color: AppColors.border)),
                 child: Padding(
                   padding: const EdgeInsets.all(6),
                   child: Row(children: [
                     Expanded(
                       child: TextFormField(
                         initialValue: _statusOpts[i].label,
-                        style: const TextStyle(color: AppColors.textPrimary, fontSize: 13),
-                        decoration: const InputDecoration(labelText: 'label', isDense: true),
+                        style: TextStyle(color: AppColors.textPrimary, fontSize: 13),
+                        decoration: InputDecoration(labelText: t.labelFieldLbl, isDense: true),
                         onChanged: (v) {
                           final l = List<StatusOption>.from(_statusOpts);
                           l[i] = StatusOption(id: l[i].id, label: v, colorHex: l[i].colorHex);
@@ -281,23 +285,24 @@ class _ColumnEditDialogState extends ConsumerState<_ColumnEditDialog> {
                       },
                       child: Container(width: 32, height: 32, decoration: BoxDecoration(color: _hex(_statusOpts[i].colorHex), shape: BoxShape.circle, border: Border.all(color: AppColors.border))),
                     ),
-                    IconButton(icon: const Icon(Icons.delete, size: 18, color: AppColors.textSecondary), onPressed: () => setState(() => _statusOpts.removeAt(i))),
+                    IconButton(icon: Icon(Icons.delete, size: 18, color: AppColors.textSecondary), onPressed: () => setState(() => _statusOpts.removeAt(i))),
                   ]),
                 ),
               ),
-            TextButton.icon(onPressed: () => setState(() => _statusOpts.add(StatusOption(id: _uuid.v4(), label: 'new', colorHex: '#475569'))), icon: const Icon(Icons.add, size: 16), label: const Text('Add option'))
+            TextButton.icon(onPressed: () => setState(() => _statusOpts.add(StatusOption(id: _uuid.v4(), label: 'new', colorHex: '#475569'))), icon: const Icon(Icons.add, size: 16), label: Text(t.addOptionLbl))
           ]
         ]),
       ),
       actions: [
-        TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
-        FilledButton(onPressed: _save, child: Text(isNew ? 'Add' : 'Save')),
+        TextButton(onPressed: () => Navigator.pop(context), child: Text(t.cancel)),
+        FilledButton(onPressed: _save, child: Text(isNew ? t.add : t.save)),
       ],
     );
   }
 
   Future<void> _save() async {
     final svc = ref.read(supabaseServiceProvider);
+    final loc = AppLocalizations.of(context)!;
     final id = widget.existing?.id ?? 'col_${_uuid.v4()}';
     int pos;
     if (widget.existing != null) {
@@ -309,14 +314,14 @@ class _ColumnEditDialogState extends ConsumerState<_ColumnEditDialog> {
     Map<String, dynamic> cfg = {};
     if (_type == ColumnType.status) cfg = {'options': _statusOpts.map((e) => e.toJson()).toList()};
     if (_type == ColumnType.number) cfg = {'unit': _unit};
-    final col = ColumnDefinition(id: id, label: _label.text.trim().isEmpty ? 'untitled' : _label.text.trim(), type: _type, position: pos, config: cfg);
+    final col = ColumnDefinition(id: id, label: _label.text.trim().isEmpty ? loc.untitledLower : _label.text.trim(), type: _type, position: pos, config: cfg);
     if (widget.existing != null && widget.existing!.type != _type) {
       final ok = await showDialog<bool>(context: context, builder: (_) => AlertDialog(
         backgroundColor: AppColors.surface,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8), side: const BorderSide(color: AppColors.border)),
-        title: const Text('Change column type?', style: TextStyle(color: AppColors.textPrimary)),
-        content: Text('Change "${widget.existing!.label}" from ${widget.existing!.type.label} to ${_type.label}? Existing cell values will be cleared or converted.', style: const TextStyle(color: AppColors.textSecondary, fontSize: 13)),
-        actions: [TextButton(onPressed: ()=> Navigator.pop(context,false), child: const Text('Cancel')), FilledButton(onPressed: ()=> Navigator.pop(context,true), child: const Text('Change'))],
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8), side: BorderSide(color: AppColors.border)),
+        title: Text(loc.changeTypeTitle, style: TextStyle(color: AppColors.textPrimary)),
+        content: Text(loc.changeTypeBody(widget.existing!.label, widget.existing!.type.labelL(loc), _type.labelL(loc)), style: TextStyle(color: AppColors.textSecondary, fontSize: 13)),
+        actions: [TextButton(onPressed: ()=> Navigator.pop(context,false), child: Text(loc.cancel)), FilledButton(onPressed: ()=> Navigator.pop(context,true), child: Text(loc.changeBtn))],
       ));
       if (ok != true) return;
     }
@@ -334,13 +339,14 @@ class _ColorPicker extends StatelessWidget {
   const _ColorPicker({required this.initial});
   @override
   Widget build(BuildContext context) {
+    final loc = AppLocalizations.of(context)!;
     final colors = [const Color(0xFFF43F5E), const Color(0xFF22C55E), const Color(0xFF475569), const Color(0xFFF59E0B), Colors.blue, Colors.purple, Colors.teal, Colors.orange, Colors.pink];
     return AlertDialog(
       backgroundColor: AppColors.surface,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8), side: const BorderSide(color: AppColors.border)),
-      title: const Text('Pick color', style: TextStyle(color: AppColors.textPrimary)),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8), side: BorderSide(color: AppColors.border)),
+      title: Text(loc.pickColorTitle, style: TextStyle(color: AppColors.textPrimary)),
       content: Wrap(spacing: 8, runSpacing: 8, children: colors.map((c) => GestureDetector(onTap: () => Navigator.pop(context, c), child: Container(width: 36, height: 36, decoration: BoxDecoration(color: c, shape: BoxShape.circle, border: Border.all(color: AppColors.border))))).toList()),
-      actions: [TextButton(onPressed: () => Navigator.pop(context), child: const Text('Close'))],
+      actions: [TextButton(onPressed: () => Navigator.pop(context), child: Text(loc.close))],
     );
   }
 }

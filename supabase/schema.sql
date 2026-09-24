@@ -132,3 +132,19 @@ exception when others then null; end $$;
 -- Note: instant writes: every create/update/delete does immediate supabase upsert/insert/delete
 -- and is also queued in SharedPreferences via OfflineCache if offline, then flushed on reconnect.
 -- No batch timer — see lib/services/supabase_service.dart setCellValue/toggleChecked/addTask etc.
+
+-- 4. Suggestions (public inbox for improvement ideas — read them in Dashboard > Table Editor)
+create table if not exists public.suggestions (
+  id uuid primary key,
+  user_id uuid,
+  name text not null default '',
+  message text not null,
+  created_at timestamp with time zone default now()
+);
+alter table public.suggestions enable row level security;
+drop policy if exists "Allow all suggestions" on public.suggestions;
+create policy "Allow all suggestions" on public.suggestions for all using (true) with check (true);
+create index if not exists idx_suggestions_created on public.suggestions(created_at desc);
+do $$ begin
+  alter publication supabase_realtime add table public.suggestions;
+exception when others then null; end $$;

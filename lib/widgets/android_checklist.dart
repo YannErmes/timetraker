@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:tracker_sheet/l10n/app_localizations.dart';
 import '../config/app_colors.dart';
 import '../providers/app_providers.dart';
 import '../providers/column_visibility.dart';
@@ -16,6 +17,7 @@ class AndroidChecklist extends ConsumerWidget {
     ref.watch(tasksProvider);
     ref.watch(columnsProvider);
     ref.watch(entriesProvider);
+    final loc = AppLocalizations.of(context)!;
     final filters = ref.watch(taskFiltersProvider);
     final allCols = List.of(svc.columns)..sort((a, b) => a.position.compareTo(b.position));
     final hidden = ref.watch(columnVisibilityProvider);
@@ -54,15 +56,15 @@ class AndroidChecklist extends ConsumerWidget {
             padding: EdgeInsets.all(isSmall ? 12 : 16),
             child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
               Row(children: [
-                const Icon(Icons.checklist_rounded, size: 20, color: AppColors.accent),
+                Icon(Icons.checklist_rounded, size: 20, color: AppColors.accent),
                 const SizedBox(width: 8),
-                const Text('Today', style: TextStyle(color: AppColors.textPrimary, fontWeight: FontWeight.w700, fontSize: 18)),
+                Text(loc.todayTitle, style: TextStyle(color: AppColors.textPrimary, fontWeight: FontWeight.w700, fontSize: 18)),
                 const Spacer(),
-                Text('${date.month}/${date.day}/${date.year}', style: const TextStyle(color: AppColors.textSecondary, fontSize: 13)),
+                Text('${date.month}/${date.day}/${date.year}', style: TextStyle(color: AppColors.textSecondary, fontSize: 13)),
                 const SizedBox(width: 8),
                 IconButton(
-                  icon: const Icon(Icons.calendar_today, size: 18, color: AppColors.textSecondary),
-                  style: IconButton.styleFrom(backgroundColor: AppColors.inputFill, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8), side: const BorderSide(color: AppColors.border))),
+                  icon: Icon(Icons.calendar_today, size: 18, color: AppColors.textSecondary),
+                  style: IconButton.styleFrom(backgroundColor: AppColors.inputFill, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8), side: BorderSide(color: AppColors.border))),
                   onPressed: () async {
                     final d = await showDatePicker(context: context, initialDate: date, firstDate: DateTime(2020), lastDate: DateTime(2035));
                     if (d != null) ref.read(selectedDateProvider.notifier).state = d;
@@ -72,31 +74,31 @@ class AndroidChecklist extends ConsumerWidget {
               const SizedBox(height: 12),
               // Search for phone - compact
               TextField(
-                style: const TextStyle(color: AppColors.textPrimary, fontSize: 14),
+                style: TextStyle(color: AppColors.textPrimary, fontSize: 14),
                 decoration: InputDecoration(
-                  hintText: 'Search tasks…',
-                  hintStyle: const TextStyle(color: AppColors.textSecondary, fontSize: 13),
-                  prefixIcon: const Icon(Icons.search, size: 18, color: AppColors.textSecondary),
+                  hintText: loc.searchHint,
+                  hintStyle: TextStyle(color: AppColors.textSecondary, fontSize: 13),
+                  prefixIcon: Icon(Icons.search, size: 18, color: AppColors.textSecondary),
                   isDense: true,
                   contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                   filled: true,
                   fillColor: AppColors.inputFill,
-                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: AppColors.border)),
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: AppColors.border)),
                 ),
                 onChanged: (v) => ref.read(taskFiltersProvider.notifier).setSearch(v),
               ),
               if (tasks.length != allTasks.length) ...[
                 const SizedBox(height: 8),
-                Text('${tasks.length} of ${allTasks.length} tasks • tap filter icon for more', style: const TextStyle(fontSize: 11, color: AppColors.textSecondary)),
+                Text(loc.tapFilterHint('${tasks.length}', '${allTasks.length}'), style: TextStyle(fontSize: 11, color: AppColors.textSecondary)),
               ],
             ]),
           ),
-          const Divider(height: 1, color: AppColors.border),
+          Divider(height: 1, color: AppColors.border),
           for (final t in tasks)
             Card(
               color: AppColors.surface,
               margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8), side: const BorderSide(color: AppColors.border)),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8), side: BorderSide(color: AppColors.border)),
               child: Padding(
                 padding: const EdgeInsets.all(12),
                 child: Column(children: [
@@ -106,9 +108,9 @@ class AndroidChecklist extends ConsumerWidget {
                       final checked = e?.checked ?? false;
                       return Checkbox(value: checked, onChanged: (v) => svc.toggleChecked(t.id, date, v ?? false));
                     }),
-                    Expanded(child: Text(t.name.isEmpty ? 'Untitled' : t.name, style: const TextStyle(fontWeight: FontWeight.w600, color: AppColors.textPrimary))),
+                    Expanded(child: Text(t.name.isEmpty ? loc.untitledCap : t.name, style: TextStyle(fontWeight: FontWeight.w600, color: AppColors.textPrimary))),
                   ]),
-                  const Divider(color: AppColors.border, height: 16),
+                  Divider(color: AppColors.border, height: 16),
                   // Responsive: on small phones, stack more compact
                   Wrap(
                     spacing: 10,
@@ -139,7 +141,7 @@ class AndroidChecklist extends ConsumerWidget {
                                     final ids = raw is List ? List<String>.from(raw) : <String>[];
                                     return TagCell(selectedIds: ids, options: col.tagOptions, onChanged: (v) => svc.setCellValue(t.id, date, col.id, v));
                                   default:
-                                    return Text(raw?.toString() ?? '—', style: const TextStyle(fontSize: 12, color: AppColors.textPrimary));
+                                    return Text(raw?.toString() ?? '—', style: TextStyle(fontSize: 12, color: AppColors.textPrimary));
                                 }
                               }),
                             ),
@@ -152,8 +154,8 @@ class AndroidChecklist extends ConsumerWidget {
             ),
           Padding(
             padding: const EdgeInsets.all(16),
-            child: Text('Android simplified view — checkbox + status editing only. Structural edits (add/reorder columns) on Web. Synced via Supabase realtime. Offline queue enabled.',
-                style: const TextStyle(fontSize: 11, color: AppColors.textSecondary), textAlign: TextAlign.center),
+            child: Text(loc.androidNote,
+                style: TextStyle(fontSize: 11, color: AppColors.textSecondary), textAlign: TextAlign.center),
           ),
         ],
       ),

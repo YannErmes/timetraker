@@ -2,6 +2,8 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:intl/intl.dart';
+import 'package:tracker_sheet/l10n/app_localizations.dart';
 import '../config/app_colors.dart';
 import '../providers/app_providers.dart';
 import '../providers/task_filters.dart';
@@ -51,11 +53,14 @@ class _MonthlyViewState extends ConsumerState<MonthlyView> {
     final svc = ref.watch(supabaseServiceProvider);
     ref.watch(tasksProvider);
     ref.watch(entriesProvider);
+    final t = AppLocalizations.of(context)!;
     final tasks = svc.tasks;
     final entries = svc.entries;
     final anchor = ref.watch(selectedDateProvider);
     final days = monthDates(anchor);
-    final monthLabel = '${_monthName(anchor.month)} ${anchor.year}';
+    final monthLabel = DateFormat('MMMM yyyy').format(anchor);
+    // Reference Mon..Sun for the localized weekday header.
+    final weekdayRef = DateTime(2026, 9, 21);
     // Row index (0-5) of the week containing today, if today is visible in
     // this 42-day grid — used to slightly highlight the current week row.
     final todayNorm = normalizeDate(DateTime.now());
@@ -73,35 +78,35 @@ class _MonthlyViewState extends ConsumerState<MonthlyView> {
           color: AppColors.header,
           padding: const EdgeInsets.all(12),
           child: Row(children: [
-            IconButton(icon: const Icon(Icons.chevron_left, color: AppColors.textSecondary), onPressed: () => ref.read(selectedDateProvider.notifier).state = DateTime(anchor.year, anchor.month - 1, 1)),
-            Text(monthLabel, style: const TextStyle(fontWeight: FontWeight.w700, color: AppColors.textPrimary)),
-            IconButton(icon: const Icon(Icons.chevron_right, color: AppColors.textSecondary), onPressed: () => ref.read(selectedDateProvider.notifier).state = DateTime(anchor.year, anchor.month + 1, 1)),
+            IconButton(icon: Icon(Icons.chevron_left, color: AppColors.textSecondary), onPressed: () => ref.read(selectedDateProvider.notifier).state = DateTime(anchor.year, anchor.month - 1, 1)),
+            Text(monthLabel, style: TextStyle(fontWeight: FontWeight.w700, color: AppColors.textPrimary)),
+            IconButton(icon: Icon(Icons.chevron_right, color: AppColors.textSecondary), onPressed: () => ref.read(selectedDateProvider.notifier).state = DateTime(anchor.year, anchor.month + 1, 1)),
             const Spacer(),
-            OutlinedButton(onPressed: _goToday, child: const Text('Today')),
+            OutlinedButton(onPressed: _goToday, child: Text(t.today)),
             const SizedBox(width: 4),
             IconButton(
-              icon: const Icon(Icons.sync_rounded, size: 18, color: AppColors.textSecondary),
-              tooltip: 'Sync monthly to Google',
+              icon: Icon(Icons.sync_rounded, size: 18, color: AppColors.textSecondary),
+              tooltip: t.syncMonthlyTip,
               onPressed: () async {
                 try {
                   final svc = ref.read(supabaseServiceProvider);
                   final count = await GoogleCalendarService.instance.syncMonth(anchor, svc.tasks, svc.entries);
-                  if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Synced $count events to Google Calendar'), backgroundColor: AppColors.surface));
+                  if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(t.syncedMsg('$count')), backgroundColor: AppColors.surface));
                 } catch (e) {
-                  if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Sync failed: $e. Connect Google first in View Settings (tune icon).')));
+                  if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(t.syncFailedMsg('$e'))));
                 }
               },
             ),
             const SizedBox(width: 4),
-            FilledButton.icon(icon: const Icon(Icons.add, size: 16), label: const Text('Add task'), onPressed: () => _showAddTaskDialog(context, ref, anchor)),
+            FilledButton.icon(icon: const Icon(Icons.add, size: 16), label: Text(t.addTask), onPressed: () => _showAddTaskDialog(context, ref, anchor)),
           ]),
         ),
         Container(
           color: AppColors.header,
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-          child: Row(children: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map((w) => Expanded(child: Center(child: Text(w, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: AppColors.textPrimary))))).toList()),
+          child: Row(children: List.generate(7, (i) => weekdayRef.add(Duration(days: i))).map((w) => Expanded(child: Center(child: Text(DateFormat('EEE').format(w), style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: AppColors.textPrimary))))).toList()),
         ),
-        const Divider(height: 1, color: AppColors.border),
+        Divider(height: 1, color: AppColors.border),
         Expanded(
           child: GridView.builder(
             padding: const EdgeInsets.all(8),
@@ -193,7 +198,7 @@ class _MonthlyViewState extends ConsumerState<MonthlyView> {
                       if (scheduledEntries.isNotEmpty) Container(width: 10, height: 10, decoration: BoxDecoration(color: heat, shape: BoxShape.circle)),
                     ]),
                     const SizedBox(height: 4),
-                    Text('$scheduled/$total scheduled', style: const TextStyle(fontSize: 10, color: AppColors.textSecondary)),
+                    Text(t.scheduledOf('$scheduled', '$total'), style: TextStyle(fontSize: 10, color: AppColors.textSecondary)),
                     const SizedBox(height: 4),
                     LinearProgressIndicator(value: pct, minHeight: 4, backgroundColor: AppColors.inputFill, valueColor: AlwaysStoppedAnimation(heat), borderRadius: BorderRadius.circular(8)),
                     if (scheduledEntries.isNotEmpty) ...[
@@ -203,7 +208,7 @@ class _MonthlyViewState extends ConsumerState<MonthlyView> {
                           physics: const NeverScrollableScrollPhysics(),
                           children: scheduledEntries.take(3).map((e) {
                             final t = tasks.where((x) => x.id == e.taskId).firstOrNull;
-                            return Text(t == null ? '' : (t.name.isEmpty ? '·' : t.name), style: const TextStyle(fontSize: 9, color: AppColors.textSecondary), overflow: TextOverflow.ellipsis);
+                            return Text(t == null ? '' : (t.name.isEmpty ? '·' : t.name), style: TextStyle(fontSize: 9, color: AppColors.textSecondary), overflow: TextOverflow.ellipsis);
                           }).toList(),
                         ),
                       ),
@@ -236,7 +241,6 @@ class _MonthlyViewState extends ConsumerState<MonthlyView> {
   }
 
   String _key(DateTime d) => '${d.year.toString().padLeft(4, '0')}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
-  String _monthName(int m) => ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][m - 1];
   Color _heatColor(double pct) {
     if (pct == 0) return AppColors.border;
     if (pct < 0.3) return const Color(0xFFF59E0B);
@@ -278,29 +282,30 @@ class _MonthlyAddTaskDialogState extends ConsumerState<_MonthlyAddTaskDialog> {
   @override
   Widget build(BuildContext context) {
     final svc = ref.watch(supabaseServiceProvider);
+    final loc = AppLocalizations.of(context)!;
     final cols = svc.columns;
     final statusCol = cols.where((c) => c.type.name == 'status').firstOrNull;
     final statusOpts = statusCol != null ? (statusCol.config['options'] as List? ?? []) : [];
 
     return Container(
-      decoration: BoxDecoration(color: AppColors.surface, borderRadius: BorderRadius.circular(12), border: Border.all(color: AppColors.border)),
+      decoration: BoxDecoration(color: AppColors.surface, borderRadius: BorderRadius.circular(16), border: Border.all(color: AppColors.border)),
       child: Column(mainAxisSize: MainAxisSize.min, children: [
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-          decoration: const BoxDecoration(color: AppColors.header, borderRadius: BorderRadius.vertical(top: Radius.circular(12))),
+          decoration: BoxDecoration(color: AppColors.header, borderRadius: BorderRadius.vertical(top: Radius.circular(16))),
           child: Row(children: [
-            const Icon(Icons.add_task_rounded, size: 18, color: AppColors.accent),
+            Icon(Icons.add_task_rounded, size: 18, color: AppColors.accent),
             const SizedBox(width: 8),
-            const Text('Add task', style: TextStyle(color: AppColors.textPrimary, fontWeight: FontWeight.w700)),
+            Text(loc.addTask, style: TextStyle(color: AppColors.textPrimary, fontWeight: FontWeight.w700)),
             const Spacer(),
-            IconButton(icon: const Icon(Icons.close, size: 18, color: AppColors.textSecondary), onPressed: () => Navigator.pop(context)),
+            IconButton(icon: Icon(Icons.close, size: 18, color: AppColors.textSecondary), onPressed: () => Navigator.pop(context)),
           ]),
         ),
         Flexible(
           child: SingleChildScrollView(
             padding: const EdgeInsets.all(16),
             child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              TextField(controller: _nameCtrl, autofocus: true, style: const TextStyle(color: AppColors.textPrimary), decoration: const InputDecoration(labelText: 'Task name *', hintText: 'e.g. Typing')),
+              TextField(controller: _nameCtrl, autofocus: true, style: TextStyle(color: AppColors.textPrimary), decoration: InputDecoration(labelText: loc.taskNameReq, hintText: loc.taskNameHint)),
               const SizedBox(height: 12),
               InkWell(
                 borderRadius: BorderRadius.circular(8),
@@ -312,29 +317,29 @@ class _MonthlyAddTaskDialogState extends ConsumerState<_MonthlyAddTaskDialog> {
                   padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                   decoration: BoxDecoration(color: AppColors.inputFill, borderRadius: BorderRadius.circular(8), border: Border.all(color: AppColors.inputBorder)),
                   child: Row(children: [
-                    const Icon(Icons.calendar_today_rounded, size: 14, color: AppColors.textSecondary),
+                    Icon(Icons.calendar_today_rounded, size: 14, color: AppColors.textSecondary),
                     const SizedBox(width: 8),
-                    const Text('Scheduled day:', style: TextStyle(fontSize: 11, color: AppColors.textSecondary)),
+                    Text(loc.scheduledDay, style: TextStyle(fontSize: 11, color: AppColors.textSecondary)),
                     const SizedBox(width: 8),
-                    Text(_fmtDate(_date), style: const TextStyle(fontSize: 12, color: AppColors.textPrimary, fontWeight: FontWeight.w600)),
+                    Text(_fmtDate(_date), style: TextStyle(fontSize: 12, color: AppColors.textPrimary, fontWeight: FontWeight.w600)),
                     const Spacer(),
-                    const Icon(Icons.arrow_drop_down, size: 18, color: AppColors.textSecondary),
+                    Icon(Icons.arrow_drop_down, size: 18, color: AppColors.textSecondary),
                   ]),
                 ),
               ),
               const SizedBox(height: 12),
               // Schedule time-of-day
               Row(children: [
-                const Icon(Icons.access_time_rounded, size: 14, color: AppColors.textSecondary),
+                Icon(Icons.access_time_rounded, size: 14, color: AppColors.textSecondary),
                 const SizedBox(width: 6),
-                const Text('Schedule', style: TextStyle(fontSize: 11, color: AppColors.textSecondary, fontWeight: FontWeight.w700)),
+                Text(loc.scheduleLbl, style: TextStyle(fontSize: 11, color: AppColors.textSecondary, fontWeight: FontWeight.w700)),
                 const Spacer(),
                 TextButton(
                   onPressed: () async {
-                    final t = await showTimePicker(context: context, initialTime: TimeOfDay.now());
-                    if (t != null) setState(() => _schedule = '${t.hour.toString().padLeft(2, '0')}:${t.minute.toString().padLeft(2, '0')}');
+                    final time = await showTimePicker(context: context, initialTime: TimeOfDay.now());
+                    if (time != null) setState(() => _schedule = '${time.hour.toString().padLeft(2, '0')}:${time.minute.toString().padLeft(2, '0')}');
                   },
-                  child: Text(_schedule == null ? 'Set time' : _schedule!, style: const TextStyle(fontSize: 12)),
+                  child: Text(_schedule == null ? loc.setTimeBtn : _schedule!, style: const TextStyle(fontSize: 12)),
                 ),
                 if (_schedule != null) IconButton(icon: const Icon(Icons.clear, size: 14), onPressed: () => setState(() => _schedule = null)),
               ]),
@@ -342,20 +347,20 @@ class _MonthlyAddTaskDialogState extends ConsumerState<_MonthlyAddTaskDialog> {
               // Time duration
               TextField(
                 onChanged: (v) => _durationText = v,
-                style: const TextStyle(color: AppColors.textPrimary, fontSize: 12),
-                decoration: const InputDecoration(labelText: 'Time (duration)', hintText: 'e.g. 3h5min, 4h, 30min', prefixIcon: Icon(Icons.hourglass_bottom_rounded, size: 16)),
+                style: TextStyle(color: AppColors.textPrimary, fontSize: 12),
+                decoration: InputDecoration(labelText: loc.timeDurationLbl, hintText: loc.timeHint, prefixIcon: Icon(Icons.hourglass_bottom_rounded, size: 16)),
               ),
               const SizedBox(height: 12),
               // Status
               DropdownButtonFormField<String?>(
                 value: _status,
                 dropdownColor: AppColors.surface,
-                style: const TextStyle(color: AppColors.textPrimary, fontSize: 12),
-                decoration: const InputDecoration(labelText: 'Status', isDense: true),
+                style: TextStyle(color: AppColors.textPrimary, fontSize: 12),
+                decoration: InputDecoration(labelText: loc.statusLbl, isDense: true),
                 items: [
                   for (final o in statusOpts)
                     DropdownMenuItem(value: (o as Map<String, dynamic>)['id'] as String, child: Text((o as Map<String, dynamic>)['label'] as String)),
-                  if (statusOpts.isEmpty) const DropdownMenuItem(value: 'none', child: Text('none')),
+                  if (statusOpts.isEmpty) DropdownMenuItem(value: 'none', child: Text(loc.untitledLower)),
                 ],
                 onChanged: (v) => setState(() => _status = v),
               ),
@@ -364,18 +369,18 @@ class _MonthlyAddTaskDialogState extends ConsumerState<_MonthlyAddTaskDialog> {
                 controller: _noteCtrl,
                 maxLines: 3,
                 minLines: 2,
-                style: const TextStyle(color: AppColors.textPrimary, fontSize: 12),
-                decoration: const InputDecoration(labelText: 'Note', hintText: 'Add a note for this task…'),
+                style: TextStyle(color: AppColors.textPrimary, fontSize: 12),
+                decoration: InputDecoration(labelText: loc.noteLbl, hintText: loc.noteHint),
               ),
             ]),
           ),
         ),
         Container(
           padding: const EdgeInsets.all(12),
-          decoration: const BoxDecoration(border: Border(top: BorderSide(color: AppColors.border)), borderRadius: BorderRadius.vertical(bottom: Radius.circular(12))),
+          decoration: BoxDecoration(border: Border(top: BorderSide(color: AppColors.border)), borderRadius: BorderRadius.vertical(bottom: Radius.circular(16))),
           child: Row(children: [
-            const Expanded(child: Text('Creates task and schedules it for the chosen day (checkbox = scheduled).', style: TextStyle(fontSize: 10, color: AppColors.textSecondary))),
-            TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+            Expanded(child: Text(loc.createsHint, style: TextStyle(fontSize: 10, color: AppColors.textSecondary))),
+            TextButton(onPressed: () => Navigator.pop(context), child: Text(loc.cancel)),
             const SizedBox(width: 8),
             FilledButton(
               onPressed: () async {
@@ -418,7 +423,7 @@ class _MonthlyAddTaskDialogState extends ConsumerState<_MonthlyAddTaskDialog> {
                 }
                 if (context.mounted) Navigator.pop(context);
               },
-              child: const Text('Create'),
+              child: Text(loc.create),
             ),
           ]),
         ),

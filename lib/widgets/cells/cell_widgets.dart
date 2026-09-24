@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:tracker_sheet/l10n/app_localizations.dart';
 import '../../config/app_colors.dart';
 import '../../models/column_definition.dart';
 
@@ -19,16 +20,16 @@ class _PillStyle {
 _PillStyle _pillFor(String? id) {
   switch (id) {
     case 'done':
-      return const _PillStyle(fill: AppColors.doneFill, text: AppColors.doneText, border: AppColors.doneBorder);
+      return _PillStyle(fill: AppColors.doneFill, text: AppColors.doneText, border: AppColors.doneBorder);
     case 'cancel':
-      return const _PillStyle(fill: AppColors.cancelFill, text: AppColors.cancelText, border: AppColors.cancelBorder);
+      return _PillStyle(fill: AppColors.cancelFill, text: AppColors.cancelText, border: AppColors.cancelBorder);
     case 'in_progress':
     case 'in progress':
-      return const _PillStyle(fill: AppColors.inProgressFill, text: AppColors.inProgressText, border: AppColors.inProgressBorder);
+      return _PillStyle(fill: AppColors.inProgressFill, text: AppColors.inProgressText, border: AppColors.inProgressBorder);
     case 'none':
     default:
       // none / unset = quiet slate, low contrast
-      return const _PillStyle(fill: AppColors.inputFill, text: AppColors.textSecondary, border: AppColors.inputBorder);
+      return _PillStyle(fill: AppColors.inputFill, text: AppColors.textSecondary, border: AppColors.inputBorder);
   }
 }
 
@@ -145,7 +146,7 @@ class _DurationCellState extends State<DurationCell> {
       child: TextField(
         controller: _c,
         focusNode: _focus,
-        style: const TextStyle(fontSize: 12, color: AppColors.textPrimary),
+        style: TextStyle(fontSize: 12, color: AppColors.textPrimary),
         cursorColor: AppColors.accent,
         decoration: InputDecoration(
           filled: true,
@@ -153,10 +154,10 @@ class _DurationCellState extends State<DurationCell> {
           isDense: true,
           contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
           hintText: '',
-          hintStyle: const TextStyle(color: AppColors.textSecondary, fontSize: 11),
-          enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: const BorderSide(color: AppColors.inputBorder, width: 1)),
-          focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: const BorderSide(color: AppColors.accent, width: 2)),
-          border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: const BorderSide(color: AppColors.inputBorder, width: 1)),
+          hintStyle: TextStyle(color: AppColors.textSecondary, fontSize: 11),
+          enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide(color: AppColors.inputBorder, width: 1)),
+          focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide(color: AppColors.accent, width: 2)),
+          border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide(color: AppColors.inputBorder, width: 1)),
         ),
         onSubmitted: (v) => widget.onChanged(v.isEmpty ? null : v),
         onTapOutside: (_) {
@@ -189,7 +190,7 @@ class TagCell extends StatelessWidget {
             return Container(
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
               decoration: BoxDecoration(color: bg, borderRadius: BorderRadius.circular(8), border: Border.all(color: border, width: 1)),
-              child: Text(o?.label ?? id, style: const TextStyle(fontSize: 11, color: AppColors.textPrimary, fontWeight: FontWeight.w500)),
+              child: Text(o?.label ?? id, style: TextStyle(fontSize: 11, color: AppColors.textPrimary, fontWeight: FontWeight.w500)),
             );
           }),
         InkWell(
@@ -198,7 +199,7 @@ class TagCell extends StatelessWidget {
           child: Container(
             padding: const EdgeInsets.all(4),
             decoration: BoxDecoration(color: AppColors.inputFill, borderRadius: BorderRadius.circular(8), border: Border.all(color: AppColors.inputBorder)),
-            child: const Icon(Icons.add, size: 14, color: AppColors.textSecondary),
+            child: Icon(Icons.add, size: 14, color: AppColors.textSecondary),
           ),
         ),
       ],
@@ -232,10 +233,11 @@ class _TagPickerState extends State<_TagPicker> {
 
   @override
   Widget build(BuildContext context) {
+    final t = AppLocalizations.of(context)!;
     return AlertDialog(
       backgroundColor: AppColors.surface,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8), side: const BorderSide(color: AppColors.border)),
-      title: const Text('Tags', style: TextStyle(color: AppColors.textPrimary)),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8), side: BorderSide(color: AppColors.border)),
+      title: Text(t.tagsTitle, style: TextStyle(color: AppColors.textPrimary)),
       content: Wrap(
         spacing: 6,
         runSpacing: 6,
@@ -252,8 +254,8 @@ class _TagPickerState extends State<_TagPicker> {
             .toList(),
       ),
       actions: [
-        TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
-        FilledButton(onPressed: () => Navigator.pop(context, sel.toList()), child: const Text('OK')),
+        TextButton(onPressed: () => Navigator.pop(context), child: Text(t.cancel)),
+        FilledButton(onPressed: () => Navigator.pop(context, sel.toList()), child: Text(t.okBtn)),
       ],
     );
   }
@@ -328,7 +330,7 @@ class ScheduleCell extends StatelessWidget {
           border: Border.all(color: hasValue ? AppColors.accent.withValues(alpha: 0.6) : AppColors.inputBorder, width: 1),
         ),
         child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-          const Icon(Icons.access_time_rounded, size: 12, color: AppColors.textSecondary),
+          Icon(Icons.access_time_rounded, size: 12, color: AppColors.textSecondary),
           const SizedBox(width: 4),
           Expanded(
             child: Text(

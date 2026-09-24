@@ -1,12 +1,18 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:tracker_sheet/l10n/app_localizations.dart';
 import '../config/app_colors.dart';
+import '../config/ui_style.dart';
 import '../providers/app_providers.dart';
+import '../providers/display_prefs.dart';
 import '../services/supabase_service.dart';
 import '../widgets/weekly_grid.dart';
 import '../widgets/daily_view.dart';
 import '../widgets/monthly_view.dart';
 import '../widgets/column_settings_panel.dart';
+import '../widgets/note_editor_panel.dart';
+import '../widgets/analytics_panel.dart';
+import '../widgets/suggestion_dialog.dart';
 import '../widgets/view_settings.dart';
 import '../widgets/filter_sidebar.dart';
 
@@ -20,15 +26,26 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
 
   void _openColumnManager() {
+    // Clear any note request so the drawer shows columns, not the editor.
+    ref.read(noteEditorRequestProvider.notifier).state = null;
+    _scaffoldKey.currentState?.openEndDrawer();
+  }
+
+  void _openNoteEditor() {
     _scaffoldKey.currentState?.openEndDrawer();
   }
 
   @override
   Widget build(BuildContext context) {
+    // Whenever any note cell requests the editor, swap the drawer and open it.
+    ref.listen<NoteEditorRequest?>(noteEditorRequestProvider, (_, req) {
+      if (req != null) _openNoteEditor();
+    });
     final view = ref.watch(viewModeProvider);
     final svc = ref.watch(supabaseServiceProvider);
     final identity = ref.watch(identityServiceProvider);
     final isMobile = MediaQuery.of(context).size.width < 700;
+    final t = AppLocalizations.of(context)!;
     return Scaffold(
       key: _scaffoldKey,
       backgroundColor: AppColors.bg,
@@ -39,7 +56,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         title: LayoutBuilder(builder: (ctx, c) {
           final narrow = c.maxWidth < 380;
           return Row(children: [
-            Flexible(child: Text('Tracker Sheet', style: const TextStyle(color: AppColors.textPrimary, fontWeight: FontWeight.w700, fontSize: 16), overflow: TextOverflow.ellipsis)),
+            Flexible(child: Text('4cus', style: TextStyle(color: AppColors.textPrimary, fontWeight: FontWeight.w700, fontSize: 16), overflow: TextOverflow.ellipsis)),
             if (!isMobile && identity.name != null && !narrow) ...[
               const SizedBox(width: 10),
               Flexible(
@@ -47,9 +64,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                   padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                   decoration: BoxDecoration(color: AppColors.inputFill, borderRadius: BorderRadius.circular(8), border: Border.all(color: AppColors.border)),
                   child: Row(mainAxisSize: MainAxisSize.min, children: [
-                    const Icon(Icons.person_rounded, size: 12, color: AppColors.accent),
+                    Icon(Icons.person_rounded, size: 12, color: AppColors.accent),
                     const SizedBox(width: 4),
-                    Flexible(child: Text(identity.name!, style: const TextStyle(color: AppColors.textSecondary, fontSize: 11, fontWeight: FontWeight.w600), overflow: TextOverflow.ellipsis)),
+                    Flexible(child: Text(identity.name!, style: TextStyle(color: AppColors.textSecondary, fontSize: 11, fontWeight: FontWeight.w600), overflow: TextOverflow.ellipsis)),
                   ]),
                 ),
               ),
@@ -57,13 +74,21 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           ]);
         }),
         actions: [
+          Builder(builder: (ctx) {
+            final light = ref.watch(displayPrefsProvider).lightMode;
+            return IconButton(
+              icon: Icon(light ? Icons.light_mode_outlined : Icons.dark_mode_outlined, color: AppColors.textSecondary),
+              tooltip: light ? t.switchDark : t.switchLight,
+              onPressed: () => ref.read(displayPrefsProvider.notifier).setLightMode(!light),
+            );
+          }),
           _SyncStatusButton(svc: svc, email: identity.name),
           if (!isMobile) ...[
             SegmentedButton<ViewMode>(
-              segments: const [
-                ButtonSegment(value: ViewMode.weekly, label: Text('Weekly'), icon: Icon(Icons.view_week, size: 16)),
-                ButtonSegment(value: ViewMode.daily, label: Text('Daily'), icon: Icon(Icons.view_day, size: 16)),
-                ButtonSegment(value: ViewMode.monthly, label: Text('Monthly'), icon: Icon(Icons.calendar_month, size: 16)),
+              segments: [
+                ButtonSegment(value: ViewMode.weekly, label: Text(t.weekly), icon: Icon(Icons.view_week, size: 16)),
+                ButtonSegment(value: ViewMode.daily, label: Text(t.daily), icon: Icon(Icons.view_day, size: 16)),
+                ButtonSegment(value: ViewMode.monthly, label: Text(t.monthly), icon: Icon(Icons.calendar_month, size: 16)),
               ],
               selected: {view},
               onSelectionChanged: (s) => ref.read(viewModeProvider.notifier).state = s.first,
@@ -71,11 +96,11 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             const SizedBox(width: 8),
           ],
           IconButton(
-            icon: const Icon(Icons.filter_list_rounded, color: AppColors.textSecondary),
-            tooltip: 'Filters',
+            icon: Icon(Icons.filter_list_rounded, color: AppColors.textSecondary),
+            tooltip: t.filters,
             onPressed: () {
               if (isMobile) {
-                showModalBottomSheet(context: context, isScrollControlled: true, backgroundColor: Colors.transparent, builder: (_) => DraggableScrollableSheet(initialChildSize: 0.7, maxChildSize: 0.9, minChildSize: 0.4, builder: (_, c) => Container(decoration: const BoxDecoration(color: AppColors.surface, borderRadius: BorderRadius.vertical(top: Radius.circular(12))), child: const FilterSidebarContent(showClose: true))));
+                showModalBottomSheet(context: context, isScrollControlled: true, backgroundColor: Colors.transparent, builder: (_) => DraggableScrollableSheet(initialChildSize: 0.7, maxChildSize: 0.9, minChildSize: 0.4, builder: (_, c) => Container(decoration: BoxDecoration(color: AppColors.surface, borderRadius: BorderRadius.vertical(top: Radius.circular(12))), child: FilterSidebarContent(showClose: true))));
               } else {
                 // desktop: toggle collapsible sidebar
                 ref.read(isFilterSidebarCollapsedProvider.notifier).state = !ref.read(isFilterSidebarCollapsedProvider);
@@ -84,15 +109,20 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           ),
           const ViewSettingsButton(),
           if (!isMobile) ...[
-            IconButton(icon: const Icon(Icons.view_column, color: AppColors.textSecondary), tooltip: 'Manage Columns', onPressed: _openColumnManager),
-            IconButton(icon: const Icon(Icons.analytics_outlined, color: AppColors.textSecondary), tooltip: 'Analytics', onPressed: () => _showAnalytics(context, ref)),
+            IconButton(icon: Icon(Icons.view_column, color: AppColors.textSecondary), tooltip: t.manageColumns, onPressed: _openColumnManager),
+            IconButton(icon: Icon(Icons.analytics_outlined, color: AppColors.textSecondary), tooltip: t.analytics, onPressed: () => _showAnalytics(context, ref)),
+            const SuggestionButton(),
           ] else ...[
             PopupMenuButton<String>(
-              icon: const Icon(Icons.more_horiz, color: AppColors.textSecondary),
-              tooltip: 'More',
+              icon: Icon(Icons.more_horiz, color: AppColors.textSecondary),
+              tooltip: t.more,
               onSelected: (v) async {
                 if (v == 'columns') _openColumnManager();
                 if (v == 'analytics') _showAnalytics(context, ref);
+                if (v == 'suggest') {
+                  if (context.mounted) showDialog(context: context, builder: (_) => const SuggestionDialog());
+                  return;
+                }
                 if (v == 'reload') {
                   await svc.reloadFromCloud();
                   return;
@@ -102,28 +132,29 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                     context: context,
                     builder: (_) => AlertDialog(
                       backgroundColor: AppColors.surface,
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8), side: const BorderSide(color: AppColors.border)),
-                      title: const Text('Change name?', style: TextStyle(color: AppColors.textPrimary)),
-                      content: const Text('You will be signed out locally. Your data stays on the server under your current name and can be reclaimed by entering the exact same name again.', style: TextStyle(color: AppColors.textSecondary, fontSize: 12)),
-                      actions: [TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')), FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('Continue'))],
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8), side: BorderSide(color: AppColors.border)),
+                      title: Text(t.changeNameTitle, style: TextStyle(color: AppColors.textPrimary)),
+                      content: Text(t.changeNameBody, style: TextStyle(color: AppColors.textSecondary, fontSize: 12)),
+                      actions: [TextButton(onPressed: () => Navigator.pop(context, false), child: Text(t.cancel)), FilledButton(onPressed: () => Navigator.pop(context, true), child: Text(t.continueBtn))],
                     ),
                   );
                   if (ok == true) await svc.signOut();
                 }
               },
               itemBuilder: (_) => [
-                const PopupMenuItem(value: 'columns', child: Text('Manage Columns')),
-                const PopupMenuItem(value: 'analytics', child: Text('Analytics')),
-                const PopupMenuItem(value: 'reload', child: Text('Reload from cloud')),
-                PopupMenuItem(value: 'change', child: Text('Signed in as "${identity.name ?? ''}"')),
-                const PopupMenuItem(value: 'change', child: Text('Sign out / change name')),
+                PopupMenuItem(value: 'columns', child: Text(t.manageColumns)),
+                PopupMenuItem(value: 'analytics', child: Text(t.analytics)),
+                PopupMenuItem(value: 'suggest', child: Text(t.suggestIdea)),
+                PopupMenuItem(value: 'reload', child: Text(t.reloadCloud)),
+                PopupMenuItem(value: 'change', child: Text(t.signedInAs(identity.name ?? ''))),
+                PopupMenuItem(value: 'change', child: Text(t.signOutChange)),
               ],
             ),
           ],
           if (!isMobile)
             PopupMenuButton<String>(
-              icon: const Icon(Icons.person_rounded, color: AppColors.textSecondary),
-              tooltip: identity.name ?? 'Account',
+              icon: Icon(Icons.person_rounded, color: AppColors.textSecondary),
+              tooltip: identity.name ?? t.account,
               onSelected: (v) async {
                 if (v == 'reload') {
                   await svc.reloadFromCloud();
@@ -134,66 +165,70 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                     context: context,
                     builder: (_) => AlertDialog(
                       backgroundColor: AppColors.surface,
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8), side: const BorderSide(color: AppColors.border)),
-                      title: const Text('Change name?', style: TextStyle(color: AppColors.textPrimary)),
-                      content: const Text('You will be signed out locally. Your data stays on the server under your current name and can be reclaimed by entering the exact same name again.', style: TextStyle(color: AppColors.textSecondary, fontSize: 12)),
-                      actions: [TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')), FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('Continue'))],
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8), side: BorderSide(color: AppColors.border)),
+                      title: Text(t.changeNameTitle, style: TextStyle(color: AppColors.textPrimary)),
+                      content: Text(t.changeNameBody, style: TextStyle(color: AppColors.textSecondary, fontSize: 12)),
+                      actions: [TextButton(onPressed: () => Navigator.pop(context, false), child: Text(t.cancel)), FilledButton(onPressed: () => Navigator.pop(context, true), child: Text(t.continueBtn))],
                     ),
                   );
                   if (ok == true) await svc.signOut();
                 }
               },
               itemBuilder: (_) => [
-                PopupMenuItem(value: 'change', child: Text('Signed in as "${identity.name ?? ''}" — change name')),
-                const PopupMenuItem(value: 'reload', child: Text('Reload from cloud')),
-                const PopupMenuItem(value: 'change', child: Text('Sign out / change name')),
+                PopupMenuItem(value: 'change', child: Text(t.signedInAsChange(identity.name ?? ''))),
+                PopupMenuItem(value: 'reload', child: Text(t.reloadCloud)),
+                PopupMenuItem(value: 'change', child: Text(t.signOutChange)),
               ],
             ),
           const SizedBox(width: 4),
         ],
       ),
-      endDrawer: const ColumnSettingsPanel(),
+      endDrawer: ref.watch(noteEditorRequestProvider) != null ? const NoteEditorPanel() : const ColumnSettingsPanel(),
+      onEndDrawerChanged: (opened) {
+        // Tidy up when the drawer is dismissed (save already flushed).
+        if (!opened) ref.read(noteEditorRequestProvider.notifier).state = null;
+      },
       drawer: isMobile
           ? Drawer(
               backgroundColor: AppColors.surface,
               child: ListView(children: [
                 DrawerHeader(
-                  decoration: const BoxDecoration(color: AppColors.header),
+                  decoration: BoxDecoration(color: AppColors.header),
                   child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                    const Text('Tracker Sheet', style: TextStyle(color: AppColors.textPrimary, fontWeight: FontWeight.w700)),
+                    Text('4cus', style: TextStyle(color: AppColors.textPrimary, fontWeight: FontWeight.w700)),
                     const SizedBox(height: 8),
                     if (identity.name != null)
                       Container(
                         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                         decoration: BoxDecoration(color: AppColors.inputFill, borderRadius: BorderRadius.circular(8), border: Border.all(color: AppColors.border)),
                         child: Row(mainAxisSize: MainAxisSize.min, children: [
-                          const Icon(Icons.person_rounded, size: 12, color: AppColors.accent),
+                          Icon(Icons.person_rounded, size: 12, color: AppColors.accent),
                           const SizedBox(width: 4),
-                          Text(identity.name!, style: const TextStyle(color: AppColors.textSecondary, fontSize: 11, fontWeight: FontWeight.w600)),
+                          Text(identity.name!, style: TextStyle(color: AppColors.textSecondary, fontSize: 11, fontWeight: FontWeight.w600)),
                         ]),
                       ),
                   ]),
                 ),
-                ListTile(title: const Text('Weekly', style: TextStyle(color: AppColors.textPrimary)), selected: view == ViewMode.weekly, selectedTileColor: AppColors.inputFill, onTap: () { ref.read(viewModeProvider.notifier).state = ViewMode.weekly; Navigator.pop(context); }),
-                ListTile(title: const Text('Daily', style: TextStyle(color: AppColors.textPrimary)), selected: view == ViewMode.daily, selectedTileColor: AppColors.inputFill, onTap: () { ref.read(viewModeProvider.notifier).state = ViewMode.daily; Navigator.pop(context); }),
-                ListTile(title: const Text('Monthly', style: TextStyle(color: AppColors.textPrimary)), selected: view == ViewMode.monthly, selectedTileColor: AppColors.inputFill, onTap: () { ref.read(viewModeProvider.notifier).state = ViewMode.monthly; Navigator.pop(context); }),
-                const Divider(color: AppColors.border),
-                ListTile(title: const Text('Today (Android checklist)', style: TextStyle(color: AppColors.textSecondary)), onTap: () { ref.read(viewModeProvider.notifier).state = ViewMode.daily; Navigator.pop(context); }),
-                const Divider(color: AppColors.border),
+                ListTile(title: Text(t.weekly, style: TextStyle(color: AppColors.textPrimary)), selected: view == ViewMode.weekly, selectedTileColor: AppColors.inputFill, onTap: () { ref.read(viewModeProvider.notifier).state = ViewMode.weekly; Navigator.pop(context); }),
+                ListTile(title: Text(t.daily, style: TextStyle(color: AppColors.textPrimary)), selected: view == ViewMode.daily, selectedTileColor: AppColors.inputFill, onTap: () { ref.read(viewModeProvider.notifier).state = ViewMode.daily; Navigator.pop(context); }),
+                ListTile(title: Text(t.monthly, style: TextStyle(color: AppColors.textPrimary)), selected: view == ViewMode.monthly, selectedTileColor: AppColors.inputFill, onTap: () { ref.read(viewModeProvider.notifier).state = ViewMode.monthly; Navigator.pop(context); }),
+                Divider(color: AppColors.border),
+                ListTile(title: Text(t.todayChecklist, style: TextStyle(color: AppColors.textSecondary)), onTap: () { ref.read(viewModeProvider.notifier).state = ViewMode.daily; Navigator.pop(context); }),
+                Divider(color: AppColors.border),
                 ListTile(
-                  leading: const Icon(Icons.person_rounded, size: 16, color: AppColors.textSecondary),
-                  title: Text('Signed in as "${identity.name ?? ''}"', style: const TextStyle(color: AppColors.textSecondary, fontSize: 12)),
-                  subtitle: const Text('Tap to change name', style: TextStyle(color: AppColors.textSecondary, fontSize: 10)),
+                  leading: Icon(Icons.person_rounded, size: 16, color: AppColors.textSecondary),
+                  title: Text(t.signedInAs(identity.name ?? ''), style: TextStyle(color: AppColors.textSecondary, fontSize: 12)),
+                  subtitle: Text(t.tapToChangeName, style: TextStyle(color: AppColors.textSecondary, fontSize: 10)),
                   onTap: () async {
                     Navigator.pop(context);
                     final ok = await showDialog<bool>(
                       context: context,
                       builder: (_) => AlertDialog(
                         backgroundColor: AppColors.surface,
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8), side: const BorderSide(color: AppColors.border)),
-                        title: const Text('Change name?', style: TextStyle(color: AppColors.textPrimary)),
-                        content: const Text('Your data stays under the current name. You can reclaim it later by entering the exact same name again.', style: TextStyle(color: AppColors.textSecondary, fontSize: 12)),
-                        actions: [TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')), FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('Continue'))],
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8), side: BorderSide(color: AppColors.border)),
+                        title: Text(t.changeNameQ, style: TextStyle(color: AppColors.textPrimary)),
+                        content: Text(t.changeNameQBody, style: TextStyle(color: AppColors.textSecondary, fontSize: 12)),
+                        actions: [TextButton(onPressed: () => Navigator.pop(context, false), child: Text(t.cancel)), FilledButton(onPressed: () => Navigator.pop(context, true), child: Text(t.continueBtn))],
                       ),
                     );
                     if (ok == true) await svc.signOut();
@@ -205,15 +240,27 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       body: Column(children: [
         _SyncBanner(svc: svc),
         Expanded(
-          child: isMobile
-              ? _mobileBody(view)
-              : Row(children: [
+          // iOS-smooth crossfade/scale whenever the view changes.
+          child: AnimatedSwitcher(
+            duration: const Duration(milliseconds: 350),
+            switchInCurve: Curves.easeOutCubic,
+            switchOutCurve: Curves.easeInCubic,
+            transitionBuilder: UiStyle.iosSwitchTransition,
+            layoutBuilder: (current, previous) => Stack(
+              alignment: Alignment.topCenter,
+              children: [...previous, if (current != null) current],
+            ),
+            child: KeyedSubtree(
+              key: ValueKey('${isMobile ? 'm' : 'd'}-$view'),
+              child: isMobile
+                  ? _mobileBody(view)
+                  : Row(children: [
               AnimatedContainer(
                 duration: const Duration(milliseconds: 250),
                 curve: Curves.easeInOut,
                 width: ref.watch(isFilterSidebarCollapsedProvider) ? 0 : 280,
                 clipBehavior: Clip.hardEdge,
-                decoration: const BoxDecoration(border: Border(right: BorderSide(color: AppColors.border))),
+                decoration: BoxDecoration(border: Border(right: BorderSide(color: AppColors.border))),
                 child: ref.watch(isFilterSidebarCollapsedProvider) ? const SizedBox.shrink() : const FilterSidebarContent(),
               ),
               InkWell(
@@ -232,8 +279,11 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
               ),
               Expanded(child: _desktopBody(view)),
                 ]),
-        ),
-      ]),
+              ),
+            ),
+          ),
+        ],
+      ),
       floatingActionButton: isMobile
           ? FloatingActionButton(
               backgroundColor: AppColors.accent,
@@ -248,10 +298,10 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
               indicatorColor: AppColors.accent,
               selectedIndex: [ViewMode.weekly, ViewMode.daily, ViewMode.monthly].indexOf(view),
               onDestinationSelected: (i) => ref.read(viewModeProvider.notifier).state = [ViewMode.weekly, ViewMode.daily, ViewMode.monthly][i],
-              destinations: const [
-                NavigationDestination(icon: Icon(Icons.view_week, color: AppColors.textSecondary), selectedIcon: Icon(Icons.view_week, color: Colors.white), label: 'Weekly'),
-                NavigationDestination(icon: Icon(Icons.view_day, color: AppColors.textSecondary), selectedIcon: Icon(Icons.view_day, color: Colors.white), label: 'Daily'),
-                NavigationDestination(icon: Icon(Icons.calendar_month, color: AppColors.textSecondary), selectedIcon: Icon(Icons.calendar_month, color: Colors.white), label: 'Monthly'),
+              destinations: [
+                NavigationDestination(icon: Icon(Icons.view_week, color: AppColors.textSecondary), selectedIcon: Icon(Icons.view_week, color: Colors.white), label: t.weekly),
+                NavigationDestination(icon: Icon(Icons.view_day, color: AppColors.textSecondary), selectedIcon: Icon(Icons.view_day, color: Colors.white), label: t.daily),
+                NavigationDestination(icon: Icon(Icons.calendar_month, color: AppColors.textSecondary), selectedIcon: Icon(Icons.calendar_month, color: Colors.white), label: t.monthly),
               ],
             )
           : null,
@@ -278,6 +328,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   void _showAddTaskForCurrentView(BuildContext context, WidgetRef ref) {
     final view = ref.read(viewModeProvider);
     final svc = ref.read(supabaseServiceProvider);
+    final t = AppLocalizations.of(context)!;
     if (view == ViewMode.monthly) {
       // Monthly has its own Add task dialog with date+params, trigger it via MonthlyView's method
       // For mobile, just show a simple add task dialog that will be scheduled for today
@@ -286,11 +337,11 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         context: context,
         builder: (_) => AlertDialog(
           backgroundColor: AppColors.surface,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12), side: const BorderSide(color: AppColors.border)),
-          title: const Text('Add task', style: TextStyle(color: AppColors.textPrimary)),
-          content: TextField(controller: c, autofocus: true, style: const TextStyle(color: AppColors.textPrimary), decoration: const InputDecoration(labelText: 'Task name', hintText: 'e.g. Gym')),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12), side: BorderSide(color: AppColors.border)),
+          title: Text(t.addTask, style: TextStyle(color: AppColors.textPrimary)),
+          content: TextField(controller: c, autofocus: true, style: TextStyle(color: AppColors.textPrimary), decoration: InputDecoration(labelText: t.taskNameLbl, hintText: 'e.g. Gym')),
           actions: [
-            TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+            TextButton(onPressed: () => Navigator.pop(context), child: Text(t.cancel)),
             FilledButton(
               onPressed: () async {
                 final name = c.text.trim();
@@ -301,7 +352,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                 await svc.toggleChecked(svc.tasks.lastWhere((t) => t.name == name).id, today, true);
                 if (context.mounted) Navigator.pop(context);
               },
-              child: const Text('Add'),
+              child: Text(t.add),
             ),
           ],
         ),
@@ -314,90 +365,19 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       context: context,
       builder: (_) => AlertDialog(
         backgroundColor: AppColors.surface,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8), side: const BorderSide(color: AppColors.border)),
-        title: const Text('Add task', style: TextStyle(color: AppColors.textPrimary)),
-        content: TextField(controller: c, autofocus: true, style: const TextStyle(color: AppColors.textPrimary), decoration: const InputDecoration(labelText: 'Task name')),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
-          FilledButton(onPressed: () { if (c.text.trim().isNotEmpty) svc.addTask(c.text.trim()); Navigator.pop(context); }, child: const Text('Add')),
-        ],
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8), side: BorderSide(color: AppColors.border)),
+          title: Text(t.addTask, style: TextStyle(color: AppColors.textPrimary)),
+          content: TextField(controller: c, autofocus: true, style: TextStyle(color: AppColors.textPrimary), decoration: InputDecoration(labelText: t.taskNameLbl)),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(context), child: Text(t.cancel)),
+            FilledButton(onPressed: () { if (c.text.trim().isNotEmpty) svc.addTask(c.text.trim()); Navigator.pop(context); }, child: Text(t.add)),
+          ],
       ),
     );
   }
 
   void _showAnalytics(BuildContext context, WidgetRef ref) {
-    final svc = ref.read(supabaseServiceProvider);
-    final tasks = List.of(svc.tasks)..sort((a, b) => a.position.compareTo(b.position));
-    final entries = svc.entries;
-    final cols = svc.columns;
-    // find status column (first type==status) — default col_status
-    final statusCol = cols.where((c) => c.type.name == 'status').firstOrNull;
-    showDialog(
-      context: context,
-      builder: (_) => AlertDialog(
-        backgroundColor: AppColors.surface,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8), side: const BorderSide(color: AppColors.border)),
-        title: const Text('Analytics', style: TextStyle(color: AppColors.textPrimary)),
-        content: SizedBox(
-          width: 400,
-          child: Column(mainAxisSize: MainAxisSize.min, children: [
-            for (final t in tasks)
-              Builder(builder: (_) {
-                // scheduled = days where checkbox is checked (task should be performed)
-                final scheduled = entries.where((e) => e.taskId == t.id && e.checked).toList()
-                  ..sort((a, b) => a.date.compareTo(b.date));
-                final total = scheduled.length;
-                int done = 0;
-                String? mostRecentStatus;
-                if (statusCol != null && total > 0) {
-                  done = scheduled.where((e) => (e.data[statusCol.id] as String?) == 'done').length;
-                  // most recent scheduled entry by date
-                  final mostRecent = scheduled.reduce((a, b) => a.date.isAfter(b.date) ? a : b);
-                  mostRecentStatus = mostRecent.data[statusCol.id] as String?;
-                } else if (statusCol == null) {
-                  // fallback: no status column -> treat checked as done (legacy)
-                  done = total;
-                }
-                final pct = total == 0 ? 0.0 : done / total;
-                // color based on most recent status
-                Color barColor;
-                switch (mostRecentStatus) {
-                  case 'in_progress':
-                  case 'in progress':
-                    barColor = const Color(0xFFF59E0B); // amber
-                    break;
-                  case 'cancel':
-                  case 'cancelled':
-                    barColor = const Color(0xFFF43F5E); // red
-                    break;
-                  case 'done':
-                    barColor = const Color(0xFF22C55E); // green
-                    break;
-                  case 'none':
-                  case null:
-                    barColor = total == 0 ? const Color(0xFF475569) : AppColors.accent;
-                    break;
-                  default:
-                    barColor = AppColors.accent;
-                }
-                // if no scheduled days, keep gray
-                if (total == 0) barColor = const Color(0xFF475569);
-                return Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 4),
-                  child: Row(children: [
-                    Expanded(child: Text(t.name.isEmpty ? 'untitled' : t.name, style: const TextStyle(fontSize: 12, color: AppColors.textPrimary))),
-                    SizedBox(width: 120, child: LinearProgressIndicator(value: pct, backgroundColor: AppColors.inputFill, valueColor: AlwaysStoppedAnimation(barColor), borderRadius: BorderRadius.circular(8), minHeight: 6)),
-                    const SizedBox(width: 8),
-                    Text('${(pct * 100).toStringAsFixed(0)}% ($done/$total)', style: const TextStyle(fontSize: 11, color: AppColors.textSecondary)),
-                  ]),
-                );
-              }),
-            if (tasks.isEmpty) const Text('No tasks yet', style: TextStyle(color: AppColors.textSecondary)),
-          ]),
-        ),
-        actions: [TextButton(onPressed: () => Navigator.pop(context), child: const Text('Close'))],
-      ),
-    );
+    showDialog(context: context, builder: (_) => const AnalyticsDialog());
   }
 }
 
@@ -409,6 +389,7 @@ class _SyncStatusButton extends StatelessWidget {
   const _SyncStatusButton({required this.svc, required this.email});
   @override
   Widget build(BuildContext context) {
+    final loc = AppLocalizations.of(context)!;
     return ValueListenableBuilder<SyncStatus>(
       valueListenable: svc.syncStatus,
       builder: (_, status, _) {
@@ -419,33 +400,33 @@ class _SyncStatusButton extends StatelessWidget {
           case SyncStatus.cloud:
             icon = Icons.cloud_done_outlined;
             color = const Color(0xFF22C55E);
-            label = 'Cloud sync: connected';
+            label = loc.cloudOkTip;
             break;
           case SyncStatus.offlineCache:
             icon = Icons.cloud_off_outlined;
             color = const Color(0xFFF59E0B);
-            label = 'Cloud sync: offline — showing saved data';
+            label = loc.cloudOfflineTip;
             break;
           case SyncStatus.demo:
             icon = Icons.cloud_off_outlined;
             color = AppColors.textSecondary;
-            label = 'Demo mode: cloud not configured — data stays on this device';
+            label = loc.demoTip;
             break;
           case SyncStatus.error:
             icon = Icons.error_outline;
             color = const Color(0xFFF43F5E);
-            label = 'Cloud sync failed';
+            label = loc.syncErrorTip;
             break;
           case SyncStatus.loading:
             icon = Icons.cloud_sync_outlined;
             color = AppColors.textSecondary;
-            label = 'Connecting to cloud…';
+            label = loc.connectingTip;
             break;
         }
         final detail = svc.syncError;
         return IconButton(
           icon: Icon(icon, color: color, size: 20),
-          tooltip: '$label\nSigned in as ${email ?? '?'}.${detail != null ? '\n$detail' : ''}\nTap to reload from cloud.',
+          tooltip: '$label\n${loc.signedInWord(email ?? '?')}${detail != null ? '\n$detail' : ''}\n${loc.reloadTapHint}',
           onPressed: () => svc.reloadFromCloud(),
         );
       },
@@ -460,6 +441,7 @@ class _SyncBanner extends StatelessWidget {
   const _SyncBanner({required this.svc});
   @override
   Widget build(BuildContext context) {
+    final loc = AppLocalizations.of(context)!;
     return ValueListenableBuilder<SyncStatus>(
       valueListenable: svc.syncStatus,
       builder: (_, status, _) {
@@ -469,9 +451,7 @@ class _SyncBanner extends StatelessWidget {
         final isDemo = status == SyncStatus.demo;
         final bg = isDemo ? AppColors.inputFill : const Color(0xFFF43F5E).withValues(alpha: 0.12);
         final border = isDemo ? AppColors.border : const Color(0xFFF43F5E).withValues(alpha: 0.5);
-        final text = isDemo
-            ? 'Demo mode — cloud is not configured in this build, so data stays on THIS device only.'
-            : (svc.syncError ?? 'Could not reach the cloud.');
+        final text = isDemo ? loc.demoBanner : (svc.syncError ?? 'Could not reach the cloud.');
         return Container(
           width: double.infinity,
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
@@ -479,11 +459,11 @@ class _SyncBanner extends StatelessWidget {
           child: Row(children: [
             Icon(isDemo ? Icons.cloud_off_outlined : Icons.error_outline, size: 16, color: isDemo ? AppColors.textSecondary : const Color(0xFFF43F5E)),
             const SizedBox(width: 8),
-            Expanded(child: Text(text, style: const TextStyle(fontSize: 11, color: AppColors.textPrimary))),
+            Expanded(child: Text(text, style: TextStyle(fontSize: 11, color: AppColors.textPrimary))),
             TextButton(
               onPressed: () => svc.reloadFromCloud(),
               style: TextButton.styleFrom(padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4), minimumSize: Size.zero, tapTargetSize: MaterialTapTargetSize.shrinkWrap),
-              child: const Text('Retry', style: TextStyle(fontSize: 11)),
+              child: Text(loc.retry, style: const TextStyle(fontSize: 11)),
             ),
           ]),
         );

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:tracker_sheet/l10n/app_localizations.dart';
 import '../config/app_colors.dart';
 import '../providers/app_providers.dart';
 import '../providers/column_visibility.dart';
@@ -13,6 +14,7 @@ class ColumnVisibilityBar extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final svc = ref.watch(supabaseServiceProvider);
     ref.watch(columnsProvider);
+    final t = AppLocalizations.of(context)!;
     final cols = List.of(svc.columns)..sort((a, b) => a.position.compareTo(b.position));
     final hidden = ref.watch(columnVisibilityProvider);
     if (cols.isEmpty) return const SizedBox.shrink();
@@ -21,9 +23,9 @@ class ColumnVisibilityBar extends ConsumerWidget {
       color: AppColors.header,
       padding: EdgeInsets.symmetric(horizontal: compact ? 8 : 12, vertical: 6),
       child: Row(children: [
-        const Icon(Icons.visibility_outlined, size: 14, color: AppColors.textSecondary),
+        Icon(Icons.visibility_outlined, size: 14, color: AppColors.textSecondary),
         const SizedBox(width: 6),
-        Text(compact ? 'Show:' : 'Visible columns:', style: const TextStyle(fontSize: 11, color: AppColors.textSecondary, fontWeight: FontWeight.w600)),
+        Text(compact ? t.showShort : t.visibleColsShort, style: TextStyle(fontSize: 11, color: AppColors.textSecondary, fontWeight: FontWeight.w600)),
         const SizedBox(width: 8),
         Expanded(
           child: SingleChildScrollView(
@@ -56,12 +58,12 @@ class ColumnVisibilityBar extends ConsumerWidget {
         TextButton(
           onPressed: () => ref.read(columnVisibilityProvider.notifier).showAll(cols),
           style: TextButton.styleFrom(padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4), minimumSize: Size.zero, tapTargetSize: MaterialTapTargetSize.shrinkWrap),
-          child: const Text('Show all', style: TextStyle(fontSize: 10)),
+          child: Text(t.showAll, style: const TextStyle(fontSize: 10)),
         ),
         TextButton(
           onPressed: () => ref.read(columnVisibilityProvider.notifier).hideAll(cols),
           style: TextButton.styleFrom(padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4), minimumSize: Size.zero, tapTargetSize: MaterialTapTargetSize.shrinkWrap),
-          child: const Text('Hide all', style: TextStyle(fontSize: 10)),
+          child: Text(t.hideAll, style: const TextStyle(fontSize: 10)),
         ),
       ]),
     );
@@ -74,12 +76,13 @@ class ColumnVisibilitySection extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final svc = ref.watch(supabaseServiceProvider);
     ref.watch(columnsProvider);
+    final t = AppLocalizations.of(context)!;
     final cols = List.of(svc.columns)..sort((a, b) => a.position.compareTo(b.position));
     final hidden = ref.watch(columnVisibilityProvider);
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-      const Text('Visible columns', style: TextStyle(color: AppColors.textPrimary, fontWeight: FontWeight.w700, fontSize: 12)),
+      Text(t.visibleCols, style: TextStyle(color: AppColors.textPrimary, fontWeight: FontWeight.w700, fontSize: 12)),
       const SizedBox(height: 4),
-      const Text('Tap to collapse/expand each per-day field. Hidden columns stay in your data but are not shown in Weekly/Daily.', style: TextStyle(fontSize: 10, color: AppColors.textSecondary)),
+      Text(t.visibilityHelp, style: TextStyle(fontSize: 10, color: AppColors.textSecondary)),
       const SizedBox(height: 8),
       Wrap(spacing: 6, runSpacing: 6, children: [
         for (final col in cols)
@@ -99,9 +102,9 @@ class ColumnVisibilitySection extends ConsumerWidget {
       ]),
       const SizedBox(height: 8),
       Row(children: [
-        OutlinedButton(onPressed: () => ref.read(columnVisibilityProvider.notifier).showAll(cols), child: const Text('Show all')),
+        OutlinedButton(onPressed: () => ref.read(columnVisibilityProvider.notifier).showAll(cols), child: Text(t.showAll)),
         const SizedBox(width: 8),
-        OutlinedButton(onPressed: () => ref.read(columnVisibilityProvider.notifier).hideAll(cols), child: const Text('Hide all')),
+        OutlinedButton(onPressed: () => ref.read(columnVisibilityProvider.notifier).hideAll(cols), child: Text(t.hideAll)),
       ]),
     ]);
   }

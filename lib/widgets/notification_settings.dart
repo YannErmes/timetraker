@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:tracker_sheet/l10n/app_localizations.dart';
 import '../config/app_colors.dart';
 import '../services/notification_service.dart';
 import '../providers/app_providers.dart';
@@ -39,61 +40,62 @@ class _NotificationSettingsSectionState extends ConsumerState<NotificationSettin
 
   String _fmt(TimeOfDay t) => t.format(context);
 
-  String _dailyBodyForToday() {
+  String _dailyBodyForToday(AppLocalizations t) {
     try {
       final svc = ref.read(supabaseServiceProvider);
       final date = ref.read(selectedDateProvider);
       final tasks = svc.tasks;
       final scheduled = svc.entries.where((e) => e.checked && e.date.year == date.year && e.date.month == date.month && e.date.day == date.day).toList();
-      if (scheduled.isEmpty) return 'No tasks scheduled for today — tap to open Tracker Sheet.';
+      if (scheduled.isEmpty) return t.noTasksToday;
       final names = scheduled.take(4).map((e) {
-        final task = tasks.where((t) => t.id == e.taskId).firstOrNull;
-        final n = task?.name.isNotEmpty == true ? task!.name : 'Untitled';
+        final task = tasks.where((tt) => tt.id == e.taskId).firstOrNull;
+        final n = task?.name.isNotEmpty == true ? task!.name : t.untitledCap;
         final time = e.data['col_schedule'] as String?;
         return time != null && time.isNotEmpty ? '$n at $time' : n;
       }).join(', ');
       final more = scheduled.length > 4 ? ' +${scheduled.length - 4} more' : '';
-      return '$names$more • ${scheduled.length} scheduled';
+      return '$names$more • ${scheduled.length} ${t.scheduledChip.toLowerCase()}';
     } catch (_) {
-      return 'Tap to see what’s scheduled for today';
+      return t.tapToSee;
     }
   }
 
   @override
   Widget build(BuildContext context) {
+    final t = AppLocalizations.of(context)!;
     if (_loading) return const SizedBox(height: 40, child: Center(child: CircularProgressIndicator(strokeWidth: 2)));
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
       Row(children: [
-        const Icon(Icons.notifications_rounded, size: 14, color: AppColors.accent),
+        Icon(Icons.notifications_rounded, size: 14, color: AppColors.accent),
         const SizedBox(width: 6),
-        const Text('Notifications', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: AppColors.textPrimary)),
+        Text(t.notifTitle, style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: AppColors.textPrimary)),
         const Spacer(),
         Switch(value: _s.enabled, activeColor: AppColors.accent, onChanged: (v) => _save(_s.copyWith(enabled: v))),
       ]),
       const SizedBox(height: 4),
-      const Text('Alerts for timer done, daily tasks, and timer reminders — works on Android and web (when tab is open).', style: TextStyle(fontSize: 10, color: AppColors.textSecondary)),
+      Text(t.notifHelp, style: TextStyle(fontSize: 10, color: AppColors.textSecondary)),
       const SizedBox(height: 12),
       _tile(
         icon: Icons.hourglass_bottom_rounded,
-        title: 'Timer done',
-        subtitle: 'When a time countdown finishes',
+        title: t.timerDoneTitle,
+        subtitle: t.timerDoneSub,
         value: _s.timerDone,
         enabled: _s.enabled,
         onChanged: (v) => _save(_s.copyWith(timerDone: v)),
       ),
       _tile(
         icon: Icons.wb_sunny_rounded,
-        title: 'Daily briefing',
-        subtitle: 'Send next tasks for today',
+        title: t.dailyBriefTitle,
+        subtitle: t.dailyBriefSub,
         value: _s.dailyDigest,
         enabled: _s.enabled,
         onChanged: (v) => _save(_s.copyWith(dailyDigest: v)),
         trailing: _s.dailyDigest
             ? TextButton(
                 onPressed: () async {
-                  final t = await showTimePicker(context: context, initialTime: _parseTime(_s.dailyTime));
-                  if (t != null) {
-                    final hhmm = '${t.hour.toString().padLeft(2, '0')}:${t.minute.toString().padLeft(2, '0')}';
+                  final time = await showTimePicker(context: context, initialTime: _parseTime(_s.dailyTime));
+                  if (time != null) {
+                    final hhmm = '${time.hour.toString().padLeft(2, '0')}:${time.minute.toString().padLeft(2, '0')}';
                     await _save(_s.copyWith(dailyTime: hhmm));
                   }
                 },
@@ -107,23 +109,23 @@ class _NotificationSettingsSectionState extends ConsumerState<NotificationSettin
           child: Row(children: [
             OutlinedButton.icon(
               icon: const Icon(Icons.send_rounded, size: 14),
-              label: const Text('Send test now', style: TextStyle(fontSize: 11)),
+              label: Text(t.sendTestNow, style: const TextStyle(fontSize: 11)),
               onPressed: _testingDaily
                   ? null
                   : () async {
                       setState(() => _testingDaily = true);
-                      await NotificationService.instance.showNextTasks(_dailyBodyForToday());
+                      await NotificationService.instance.showNextTasks(_dailyBodyForToday(t));
                       if (mounted) setState(() => _testingDaily = false);
                     },
             ),
             const SizedBox(width: 8),
-            Text('at ${_fmt(_parseTime(_s.dailyTime))} daily', style: const TextStyle(fontSize: 10, color: AppColors.textSecondary)),
+            Text(t.atDaily(_fmt(_parseTime(_s.dailyTime))), style: TextStyle(fontSize: 10, color: AppColors.textSecondary)),
           ]),
         ),
       _tile(
         icon: Icons.alarm_rounded,
-        title: 'Timer reminders',
-        subtitle: 'Before a timer ends',
+        title: t.timerRemTitle,
+        subtitle: t.timerRemSub,
         value: _s.timerReminder,
         enabled: _s.enabled,
         onChanged: (v) => _save(_s.copyWith(timerReminder: v)),
@@ -131,9 +133,9 @@ class _NotificationSettingsSectionState extends ConsumerState<NotificationSettin
             ? DropdownButton<int>(
                 value: _s.reminderMinutes,
                 dropdownColor: AppColors.surface,
-                style: const TextStyle(color: AppColors.textPrimary, fontSize: 12),
+                style: TextStyle(color: AppColors.textPrimary, fontSize: 12),
                 underline: const SizedBox.shrink(),
-                items: const [1, 2, 5, 10, 15].map((m) => DropdownMenuItem(value: m, child: Text('$m min'))).toList(),
+                items: [1, 2, 5, 10, 15].map((m) => DropdownMenuItem(value: m, child: Text(t.minSuffix('$m')))).toList(),
                 onChanged: _s.enabled ? (v) => _save(_s.copyWith(reminderMinutes: v!)) : null,
               )
             : null,

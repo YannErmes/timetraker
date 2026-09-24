@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:tracker_sheet/l10n/app_localizations.dart';
 import '../config/app_colors.dart';
 import '../providers/task_filters.dart';
 import '../providers/app_providers.dart';
@@ -11,7 +12,7 @@ class FilterSidebar extends ConsumerWidget {
     return Drawer(
       backgroundColor: AppColors.surface,
       width: 300,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.zero, side: BorderSide(color: AppColors.border)),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.zero, side: BorderSide(color: AppColors.border)),
       child: const SafeArea(child: FilterSidebarContent(showClose: true)),
     );
   }
@@ -24,6 +25,7 @@ class FilterSidebarContent extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final filters = ref.watch(taskFiltersProvider);
     final cols = ref.watch(supabaseServiceProvider).columns;
+    final t = AppLocalizations.of(context)!;
     final statusCol = cols.where((c) => c.type.name == 'status').firstOrNull;
     final statusOpts = statusCol != null ? (statusCol.config['options'] as List? ?? []) : [];
     final tagCols = cols.where((c) => c.type.name == 'tags').toList();
@@ -40,40 +42,40 @@ class FilterSidebarContent extends ConsumerWidget {
         color: AppColors.header,
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
         child: Row(children: [
-          const Icon(Icons.filter_list_rounded, size: 18, color: AppColors.textPrimary),
+          Icon(Icons.filter_list_rounded, size: 18, color: AppColors.textPrimary),
           const SizedBox(width: 8),
-          const Text('Filters', style: TextStyle(color: AppColors.textPrimary, fontWeight: FontWeight.w700)),
+          Text(t.filters, style: TextStyle(color: AppColors.textPrimary, fontWeight: FontWeight.w700)),
           const Spacer(),
-          Text('${_activeCount(filters)} active', style: const TextStyle(fontSize: 11, color: AppColors.textSecondary)),
-          if (showClose) IconButton(icon: const Icon(Icons.close, size: 18, color: AppColors.textSecondary), onPressed: () => Navigator.pop(context)),
+          Text(t.activeShort('${_activeCount(filters)}'), style: TextStyle(fontSize: 11, color: AppColors.textSecondary)),
+          if (showClose) IconButton(icon: Icon(Icons.close, size: 18, color: AppColors.textSecondary), onPressed: () => Navigator.pop(context)),
         ]),
       ),
-      const Divider(height: 1, color: AppColors.border),
+      Divider(height: 1, color: AppColors.border),
       Expanded(
         child: ListView(padding: const EdgeInsets.all(12), children: [
           TextField(
-            style: const TextStyle(color: AppColors.textPrimary, fontSize: 12),
+            style: TextStyle(color: AppColors.textPrimary, fontSize: 12),
             decoration: InputDecoration(
-              labelText: 'Search tasks',
-              hintText: 'Search tasks…',
-              hintStyle: const TextStyle(color: AppColors.textSecondary, fontSize: 12),
-              prefixIcon: const Icon(Icons.search, size: 16, color: AppColors.textSecondary),
+              labelText: t.searchTasks,
+              hintText: t.searchHint,
+              hintStyle: TextStyle(color: AppColors.textSecondary, fontSize: 12),
+              prefixIcon: Icon(Icons.search, size: 16, color: AppColors.textSecondary),
               isDense: true,
             ),
             onChanged: (v) => ref.read(taskFiltersProvider.notifier).setSearch(v),
             controller: TextEditingController(text: filters.search)..selection = TextSelection.collapsed(offset: filters.search.length),
           ),
           const SizedBox(height: 16),
-          const Text('Status', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: AppColors.textSecondary)),
+          Text(t.statusFilterLbl, style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: AppColors.textSecondary)),
           const SizedBox(height: 6),
           DropdownButtonFormField<String?>(
             value: filters.status,
             isExpanded: true,
             dropdownColor: AppColors.surface,
-            style: const TextStyle(color: AppColors.textPrimary, fontSize: 12),
+            style: TextStyle(color: AppColors.textPrimary, fontSize: 12),
             decoration: const InputDecoration(isDense: true),
             items: [
-              const DropdownMenuItem(value: null, child: Text('All statuses')),
+              DropdownMenuItem(value: null, child: Text(t.allStatuses)),
               ...statusOpts.map((o) {
                 final m = Map<String, dynamic>.from(o);
                 return DropdownMenuItem(value: m['id'] as String, child: Text(m['label'] as String));
@@ -83,16 +85,16 @@ class FilterSidebarContent extends ConsumerWidget {
           ),
           if (allTags.isNotEmpty) ...[
             const SizedBox(height: 16),
-            const Text('Tag', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: AppColors.textSecondary)),
+            Text(t.tagFilterLbl, style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: AppColors.textSecondary)),
             const SizedBox(height: 6),
             DropdownButtonFormField<String?>(
               value: filters.tag,
               isExpanded: true,
               dropdownColor: AppColors.surface,
-              style: const TextStyle(color: AppColors.textPrimary, fontSize: 12),
+              style: TextStyle(color: AppColors.textPrimary, fontSize: 12),
               decoration: const InputDecoration(isDense: true),
               items: [
-                const DropdownMenuItem(value: null, child: Text('All tags')),
+                DropdownMenuItem(value: null, child: Text(t.allTags)),
                 ...allTags.entries.map((e) => DropdownMenuItem(value: e.key, child: Text(e.value))),
               ],
               onChanged: (v) => ref.read(taskFiltersProvider.notifier).setTag(v),
@@ -100,7 +102,7 @@ class FilterSidebarContent extends ConsumerWidget {
           ],
           const SizedBox(height: 16),
           FilterChip(
-            label: const Text('Has note only', style: TextStyle(fontSize: 12)),
+            label: Text(t.hasNoteOnlyChip, style: const TextStyle(fontSize: 12)),
             selected: filters.hasNoteOnly,
             onSelected: (v) => ref.read(taskFiltersProvider.notifier).setHasNoteOnly(v),
             backgroundColor: AppColors.inputFill,
@@ -113,15 +115,15 @@ class FilterSidebarContent extends ConsumerWidget {
             FilledButton.icon(
               onPressed: () => ref.read(taskFiltersProvider.notifier).clear(),
               icon: const Icon(Icons.clear, size: 16),
-              label: const Text('Clear all filters'),
-              style: FilledButton.styleFrom(backgroundColor: AppColors.inputFill, foregroundColor: AppColors.textPrimary, side: const BorderSide(color: AppColors.border)),
+              label: Text(t.clearAllFilters),
+              style: FilledButton.styleFrom(backgroundColor: AppColors.inputFill, foregroundColor: AppColors.textPrimary, side: BorderSide(color: AppColors.border)),
             ),
         ]),
       ),
       Container(
         padding: const EdgeInsets.all(12),
-        decoration: const BoxDecoration(border: Border(top: BorderSide(color: AppColors.border))),
-        child: Text('${_activeCount(filters)} filter${_activeCount(filters)==1?'':'s'} active • Filters apply to Weekly, Daily and Monthly', style: const TextStyle(fontSize: 11, color: AppColors.textSecondary)),
+        decoration: BoxDecoration(border: Border(top: BorderSide(color: AppColors.border))),
+        child: Text(t.filtersFooter('${_activeCount(filters)}'), style: TextStyle(fontSize: 11, color: AppColors.textSecondary)),
       ),
     ]);
   }

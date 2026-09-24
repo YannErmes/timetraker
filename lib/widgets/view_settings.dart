@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:tracker_sheet/l10n/app_localizations.dart';
 import '../config/app_colors.dart';
 import '../providers/app_providers.dart';
 import '../providers/display_prefs.dart';
@@ -12,7 +13,7 @@ class ViewSettingsButton extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     return IconButton(
-      icon: const Icon(Icons.tune, size: 18, color: AppColors.textSecondary),
+      icon: Icon(Icons.tune, size: 18, color: AppColors.textSecondary),
       tooltip: 'View density',
       onPressed: () => showDialog(context: context, builder: (_) => const _DensityDialog()),
     );
@@ -24,63 +25,90 @@ class _DensityDialog extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final prefs = ref.watch(displayPrefsProvider);
+    final t = AppLocalizations.of(context)!;
     return AlertDialog(
       backgroundColor: AppColors.surface,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8), side: const BorderSide(color: AppColors.border)),
-      title: const Row(children: [Icon(Icons.tune, size: 18, color: AppColors.accent), SizedBox(width: 8), Text('View density', style: TextStyle(color: AppColors.textPrimary))]),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8), side: BorderSide(color: AppColors.border)),
+      title: Row(children: [Icon(Icons.tune, size: 18, color: AppColors.accent), SizedBox(width: 8), Text(t.viewDensity, style: TextStyle(color: AppColors.textPrimary))]),
       content: SizedBox(
         width: 360,
         child: SingleChildScrollView(
           child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
-            const Text('Rows visible at once', style: TextStyle(color: AppColors.textSecondary, fontSize: 12, fontWeight: FontWeight.w600)),
+            Text(t.rowsVisibleLbl, style: TextStyle(color: AppColors.textSecondary, fontSize: 12, fontWeight: FontWeight.w600)),
             const SizedBox(height: 6),
             DropdownButtonFormField<int>(
               value: prefs.rowsVisible,
               dropdownColor: AppColors.surface,
-              style: const TextStyle(color: AppColors.textPrimary),
-              decoration: const InputDecoration(labelText: 'Rows'),
-              items: const [
-                DropdownMenuItem(value: 0, child: Text('All rows')),
-                DropdownMenuItem(value: 5, child: Text('5 rows')),
-                DropdownMenuItem(value: 10, child: Text('10 rows')),
-                DropdownMenuItem(value: 15, child: Text('15 rows')),
-                DropdownMenuItem(value: 20, child: Text('20 rows')),
+              style: TextStyle(color: AppColors.textPrimary),
+              decoration: InputDecoration(labelText: t.rowsLbl),
+              items: [
+                DropdownMenuItem(value: 0, child: Text(t.allRowsItem)),
+                DropdownMenuItem(value: 5, child: Text(t.rowsCountItem('5'))),
+                DropdownMenuItem(value: 10, child: Text(t.rowsCountItem('10'))),
+                DropdownMenuItem(value: 15, child: Text(t.rowsCountItem('15'))),
+                DropdownMenuItem(value: 20, child: Text(t.rowsCountItem('20'))),
               ],
               onChanged: (v) => ref.read(displayPrefsProvider.notifier).setRowsVisible(v ?? 0),
             ),
             const SizedBox(height: 16),
-            const Text('Day-columns visible at once (Weekly)', style: TextStyle(color: AppColors.textSecondary, fontSize: 12, fontWeight: FontWeight.w600)),
+            Text(t.daysVisibleLbl, style: TextStyle(color: AppColors.textSecondary, fontSize: 12, fontWeight: FontWeight.w600)),
             const SizedBox(height: 6),
             DropdownButtonFormField<int>(
               value: prefs.daysVisible,
               dropdownColor: AppColors.surface,
-              style: const TextStyle(color: AppColors.textPrimary),
-              decoration: const InputDecoration(labelText: 'Days'),
-              items: const [
-                DropdownMenuItem(value: 0, child: Text('All (7 days)')),
-                DropdownMenuItem(value: 3, child: Text('3 days')),
-                DropdownMenuItem(value: 5, child: Text('5 days')),
+              style: TextStyle(color: AppColors.textPrimary),
+              decoration: InputDecoration(labelText: t.daysLbl),
+              items: [
+                DropdownMenuItem(value: 0, child: Text(t.allDaysItem)),
+                DropdownMenuItem(value: 3, child: Text(t.daysCountItem('3'))),
+                DropdownMenuItem(value: 5, child: Text(t.daysCountItem('5'))),
               ],
               onChanged: (v) => ref.read(displayPrefsProvider.notifier).setDaysVisible(v ?? 0),
             ),
             const SizedBox(height: 16),
-            const Divider(color: AppColors.border, height: 1),
+            Text(t.cellStyleLbl, style: TextStyle(color: AppColors.textSecondary, fontSize: 12, fontWeight: FontWeight.w600)),
+            const SizedBox(height: 6),
+            SegmentedButton<bool>(
+              segments: [
+                ButtonSegment(value: false, label: Text(t.fullBtn), icon: Icon(Icons.view_agenda_outlined, size: 14)),
+                ButtonSegment(value: true, label: Text(t.basicBtn), icon: Icon(Icons.smart_button_outlined, size: 14)),
+              ],
+              selected: {prefs.basicCells},
+              onSelectionChanged: (s) => ref.read(displayPrefsProvider.notifier).setBasicCells(s.first),
+              style: const ButtonStyle(visualDensity: VisualDensity.compact),
+            ),
+            const SizedBox(height: 4),
+            Text(t.basicHelp, style: TextStyle(fontSize: 10, color: AppColors.textSecondary)),
+            const SizedBox(height: 16),
+            Text(t.appearanceLbl, style: TextStyle(color: AppColors.textSecondary, fontSize: 12, fontWeight: FontWeight.w600)),
+            const SizedBox(height: 6),
+            SegmentedButton<bool>(
+              segments: [
+                ButtonSegment(value: false, label: Text(t.darkBtn), icon: Icon(Icons.dark_mode_outlined, size: 14)),
+                ButtonSegment(value: true, label: Text(t.lightBtn), icon: Icon(Icons.light_mode_outlined, size: 14)),
+              ],
+              selected: {prefs.lightMode},
+              onSelectionChanged: (s) => ref.read(displayPrefsProvider.notifier).setLightMode(s.first),
+              style: const ButtonStyle(visualDensity: VisualDensity.compact),
+            ),
+            const SizedBox(height: 16),
+            Divider(color: AppColors.border, height: 1),
             const SizedBox(height: 12),
             const ColumnVisibilitySection(),
             const SizedBox(height: 12),
-            Container(padding: const EdgeInsets.all(8), decoration: BoxDecoration(color: AppColors.inputFill, borderRadius: BorderRadius.circular(8), border: Border.all(color: AppColors.border)), child: const Text('Column visibility is saved per user. Hide schedule/time/status/note to focus the table — e.g., show only status or only time.', style: TextStyle(fontSize: 11, color: AppColors.textSecondary))),
+            Container(padding: EdgeInsets.all(8), decoration: BoxDecoration(color: AppColors.inputFill, borderRadius: BorderRadius.circular(8), border: Border.all(color: AppColors.border)), child: Text(t.columnVisibilityHelp, style: TextStyle(fontSize: 11, color: AppColors.textSecondary))),
             const SizedBox(height: 16),
-            const Divider(color: AppColors.border, height: 1),
+            Divider(color: AppColors.border, height: 1),
             const SizedBox(height: 12),
             const NotificationSettingsSection(),
             const SizedBox(height: 16),
-            const Divider(color: AppColors.border, height: 1),
+            Divider(color: AppColors.border, height: 1),
             const SizedBox(height: 12),
             const _GoogleCalendarSection(),
           ]),
         ),
       ),
-      actions: [TextButton(onPressed: ()=> Navigator.pop(context), child: const Text('Close'))],
+      actions: [TextButton(onPressed: ()=> Navigator.pop(context), child: Text(t.close))],
     );
   }
 }
@@ -121,70 +149,71 @@ class _GoogleCalendarSectionState extends ConsumerState<_GoogleCalendarSection> 
 
   @override
   Widget build(BuildContext context) {
+    final t = AppLocalizations.of(context)!;
     if (_loading) return const SizedBox(height: 40, child: Center(child: CircularProgressIndicator(strokeWidth: 2)));
     // Gate behind VIP
     if (!_isVip) {
       return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        const Row(children: [Icon(Icons.calendar_today_rounded, size: 14, color: AppColors.textSecondary), SizedBox(width: 6), Text('Google Calendar sync', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: AppColors.textSecondary))]),
+        Row(children: [Icon(Icons.calendar_today_rounded, size: 14, color: AppColors.textSecondary), SizedBox(width: 6), Text(t.gcalTitle, style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: AppColors.textSecondary))]),
         const SizedBox(height: 4),
         Container(
           padding: const EdgeInsets.all(10),
           decoration: BoxDecoration(color: AppColors.inputFill, borderRadius: BorderRadius.circular(8), border: Border.all(color: AppColors.border)),
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            const Row(children: [Icon(Icons.lock_rounded, size: 14, color: AppColors.textSecondary), SizedBox(width: 6), Text('VIP required', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: AppColors.textPrimary))]),
+            Row(children: [Icon(Icons.lock_rounded, size: 14, color: AppColors.textSecondary), SizedBox(width: 6), Text(t.vipRequired, style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: AppColors.textPrimary))]),
             const SizedBox(height: 4),
-            const Text('Enter your VIP key to unlock Google Calendar sync.', style: TextStyle(fontSize: 10, color: AppColors.textSecondary)),
+            Text(t.vipRequiredText, style: TextStyle(fontSize: 10, color: AppColors.textSecondary)),
             const SizedBox(height: 8),
             TextField(
               controller: _vipCtrl,
-              style: const TextStyle(color: AppColors.textPrimary, fontSize: 12),
-              decoration: const InputDecoration(labelText: 'VIP key', hintText: 'paste your key', prefixIcon: Icon(Icons.workspace_premium_outlined, size: 16)),
+              style: TextStyle(color: AppColors.textPrimary, fontSize: 12),
+              decoration: InputDecoration(labelText: t.vipKeyLbl, hintText: t.vipKeyHint, prefixIcon: Icon(Icons.workspace_premium_outlined, size: 16)),
             ),
             const SizedBox(height: 8),
             SizedBox(
               width: double.infinity,
               child: FilledButton.icon(
                 icon: const Icon(Icons.lock_open_rounded, size: 14),
-                label: const Text('Unlock'),
+                label: Text(t.unlockBtn),
                 onPressed: () async {
                   final key = _vipCtrl.text.trim();
                   if (key.isEmpty) {
-                    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Enter a VIP key')));
+                    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(t.enterVipKey)));
                     return;
                   }
                   try {
                     await ref.read(identityServiceProvider).setVipKey(key);
                     await _load();
-                    if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('VIP key saved — Google sync unlocked!')));
+                    if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(t.vipSaved)));
                   } catch (e) {
-                    if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Invalid VIP key: $e')));
+                    if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(t.invalidVipKey('$e'))));
                   }
                 },
               ),
             ),
             const SizedBox(height: 4),
-            const Text('You can add the VIP key later in Settings. Without it, the sync options stay grayed out.', style: TextStyle(fontSize: 10, color: AppColors.textSecondary)),
+            Text(t.addLaterNote, style: TextStyle(fontSize: 10, color: AppColors.textSecondary)),
           ]),
         ),
       ]);
     }
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-      const Row(children: [Icon(Icons.calendar_today_rounded, size: 14, color: AppColors.accent), SizedBox(width: 6), Text('Google Calendar sync', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: AppColors.textPrimary))]),
+      Row(children: [Icon(Icons.calendar_today_rounded, size: 14, color: AppColors.accent), SizedBox(width: 6), Text(t.gcalTitle, style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: AppColors.textPrimary))]),
       const SizedBox(height: 4),
-      const Text('Sync monthly view (scheduled tasks) to your Google Calendar automatically. Put your Google email, accept the consent screen, and you’re done.', style: TextStyle(fontSize: 10, color: AppColors.textSecondary)),
+      Text(t.gcalHelp, style: TextStyle(fontSize: 10, color: AppColors.textSecondary)),
       const SizedBox(height: 8),
       if (!_connected) ...[
-        FilledButton.icon(icon: const Icon(Icons.login_rounded, size: 14), label: const Text('Connect Google Calendar'), onPressed: () async {
+        FilledButton.icon(icon: const Icon(Icons.login_rounded, size: 14), label: Text(t.connectBtn), onPressed: () async {
           try {
             await GoogleCalendarService.instance.connect();
             await _load();
-            if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Connected as ${_email ?? 'Google'}'), backgroundColor: AppColors.surface));
+            if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(t.connectedAs(_email ?? 'Google')), backgroundColor: AppColors.surface));
           } catch (e) {
-            if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Connect failed: $e')));
+            if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(t.connectFailed('$e'))));
           }
         }),
         const SizedBox(height: 6),
-        const Text('You’ll be asked to pick your Google account and Accept calendar access.', style: TextStyle(fontSize: 10, color: AppColors.textSecondary)),
+        Text(t.connectHelp, style: TextStyle(fontSize: 10, color: AppColors.textSecondary)),
       ] else ...[
         Container(
           padding: const EdgeInsets.all(8),
@@ -192,18 +221,18 @@ class _GoogleCalendarSectionState extends ConsumerState<_GoogleCalendarSection> 
           child: Row(children: [
             const Icon(Icons.check_circle_rounded, size: 14, color: Color(0xFF22C55E)),
             const SizedBox(width: 6),
-            Expanded(child: Text(_email ?? 'Connected', style: const TextStyle(fontSize: 11, color: AppColors.textPrimary, fontWeight: FontWeight.w600), overflow: TextOverflow.ellipsis)),
-            TextButton(onPressed: () async { await GoogleCalendarService.instance.disconnect(); await _load(); }, child: const Text('Disconnect', style: TextStyle(fontSize: 11))),
+            Expanded(child: Text(_email ?? t.connectedAs('Google'), style: TextStyle(fontSize: 11, color: AppColors.textPrimary, fontWeight: FontWeight.w600), overflow: TextOverflow.ellipsis)),
+            TextButton(onPressed: () async { await GoogleCalendarService.instance.disconnect(); await _load(); }, child: Text(t.disconnectBtn, style: const TextStyle(fontSize: 11))),
           ]),
         ),
         const SizedBox(height: 8),
         Row(children: [
-          const Icon(Icons.sync_rounded, size: 14, color: AppColors.textSecondary),
+          Icon(Icons.sync_rounded, size: 14, color: AppColors.textSecondary),
           const SizedBox(width: 6),
-          const Expanded(child: Text('Auto-sync monthly', style: TextStyle(fontSize: 11, color: AppColors.textSecondary))),
+          Expanded(child: Text(t.autoSyncLbl, style: TextStyle(fontSize: 11, color: AppColors.textSecondary))),
           Switch(value: _autoSync, activeColor: AppColors.accent, onChanged: (v) async { await GoogleCalendarService.instance.setAutoSync(v); setState(() => _autoSync = v); }),
         ]),
-        const Text('When on, every checkbox / schedule / time change for a scheduled day creates/updates a Google event within seconds.', style: TextStyle(fontSize: 10, color: AppColors.textSecondary)),
+        Text(t.autoSyncHelp, style: TextStyle(fontSize: 10, color: AppColors.textSecondary)),
       ],
     ]);
   }

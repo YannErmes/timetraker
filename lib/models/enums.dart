@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:tracker_sheet/l10n/app_localizations.dart';
 
 enum ColumnType {
   checkbox,
@@ -36,6 +37,30 @@ extension ColumnTypeX on ColumnType {
     }
   }
 
+  /// Localized label (needs l10n from the UI layer).
+  String labelL(AppLocalizations t) {
+    switch (this) {
+      case ColumnType.checkbox:
+        return t.ctCheckbox;
+      case ColumnType.status:
+        return t.ctStatus;
+      case ColumnType.number:
+        return t.ctNumber;
+      case ColumnType.date:
+        return t.ctDate;
+      case ColumnType.datetime:
+        return t.ctDatetime;
+      case ColumnType.tags:
+        return t.ctTags;
+      case ColumnType.text:
+        return t.ctText;
+      case ColumnType.timer:
+        return t.ctTimer;
+      case ColumnType.schedule:
+        return t.ctSchedule;
+    }
+  }
+
   String get description {
     switch (this) {
       case ColumnType.checkbox:
@@ -56,6 +81,30 @@ extension ColumnTypeX on ColumnType {
         return 'Estimated duration + live countdown timer';
       case ColumnType.schedule:
         return 'Time-of-day for that day (e.g. 9:00 AM)';
+    }
+  }
+
+  /// Localized description (needs l10n from the UI layer).
+  String descL(AppLocalizations t) {
+    switch (this) {
+      case ColumnType.checkbox:
+        return t.ctCheckboxDesc;
+      case ColumnType.status:
+        return t.ctStatusDesc;
+      case ColumnType.number:
+        return t.ctNumberDesc;
+      case ColumnType.date:
+        return t.ctDateDesc;
+      case ColumnType.datetime:
+        return t.ctDatetimeDesc;
+      case ColumnType.tags:
+        return t.ctTagsDesc;
+      case ColumnType.text:
+        return t.ctTextDesc;
+      case ColumnType.timer:
+        return t.ctTimerDesc;
+      case ColumnType.schedule:
+        return t.ctScheduleDesc;
     }
   }
 

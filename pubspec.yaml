@@ -9,6 +9,8 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
+  flutter_localizations:
+    sdk: flutter
   cupertino_icons: ^1.0.8
   supabase_flutter: ^2.8.1
   flutter_riverpod: ^2.6.1
@@ -22,7 +24,7 @@ dependencies:
   extension_google_sign_in_as_googleapis_auth: ^2.0.12
   flutter_local_notifications: ^17.1.2
   timezone: ^0.9.4
-
+  flutter_quill: ^11.6.0
 dev_dependencies:
   flutter_test:
     sdk: flutter
@@ -30,3 +32,4 @@ dev_dependencies:
 
 flutter:
   uses-material-design: true
+  generate: true

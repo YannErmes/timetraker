@@ -42,6 +42,15 @@ class AppNotificationSettings {
 class NotificationService {
   static final NotificationService instance = NotificationService._();
   NotificationService._();
+
+  /// System-locale check for notification strings (no BuildContext here).
+  static bool get _isFr {
+    try {
+      return PlatformDispatcher.instance.locale.languageCode == 'fr';
+    } catch (_) {
+      return false;
+    }
+  }
   final _plugin = FlutterLocalNotificationsPlugin();
   bool _inited = false;
 
@@ -113,7 +122,7 @@ class NotificationService {
     if (!settings.enabled) return;
     // Web: check Notification permission via plugin will prompt if needed
     const details = NotificationDetails(
-      android: AndroidNotificationDetails('tracker_sheet_main', 'Tracker Sheet', channelDescription: 'Task reminders', importance: Importance.high, priority: Priority.high),
+      android: AndroidNotificationDetails('tracker_sheet_main', '4cus', channelDescription: 'Task reminders', importance: Importance.high, priority: Priority.high),
       iOS: DarwinNotificationDetails(),
     );
     await _plugin.show(DateTime.now().millisecondsSinceEpoch % 100000, title, body, details, payload: payload);
@@ -122,13 +131,16 @@ class NotificationService {
   Future<void> showTimerDone(String taskName) async {
     final s = await getSettings();
     if (!s.enabled || !s.timerDone) return;
-    await showImmediate(title: 'Timer done', body: '"$taskName" — time is up!');
+    await showImmediate(
+      title: _isFr ? 'Minuteur terminé' : 'Timer done',
+      body: _isFr ? '"$taskName" — temps écoulé !' : '"$taskName" — time is up!',
+    );
   }
 
   Future<void> showNextTasks(String body) async {
     final s = await getSettings();
     if (!s.enabled || !s.dailyDigest) return;
-    await showImmediate(title: "Today's tasks", body: body);
+    await showImmediate(title: _isFr ? 'Tâches du jour' : "Today's tasks", body: body);
   }
 
   Future<void> scheduleDailyDigest(String timeHHmm) async {
@@ -136,9 +148,9 @@ class NotificationService {
     final parts = timeHHmm.split(':');
     final h = int.tryParse(parts[0]) ?? 8;
     final m = parts.length > 1 ? int.tryParse(parts[1]) ?? 0 : 0;
-    const details = NotificationDetails(
-      android: AndroidNotificationDetails('tracker_daily', 'Daily digest', channelDescription: 'Morning tasks', importance: Importance.high, priority: Priority.high),
-      iOS: DarwinNotificationDetails(),
+    final details = NotificationDetails(
+      android: AndroidNotificationDetails('tracker_daily', _isFr ? 'Résumé du jour' : 'Daily digest', channelDescription: _isFr ? 'Tâches du matin' : 'Morning tasks', importance: Importance.high, priority: Priority.high),
+      iOS: const DarwinNotificationDetails(),
     );
     // Use next occurrence of that time
     final now = DateTime.now();
@@ -148,8 +160,8 @@ class NotificationService {
     try {
       await _plugin.zonedSchedule(
         1001,
-        "Today's tasks",
-        'Tap to see what’s scheduled for today',
+        _isFr ? 'Tâches du jour' : "Today's tasks",
+        _isFr ? 'Touchez pour voir le programme du jour' : 'Tap to see what’s scheduled for today',
         tzDate,
         details,
         androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,

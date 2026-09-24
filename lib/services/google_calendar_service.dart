@@ -13,6 +13,14 @@ const _kAutoSyncKey = 'google_auto_sync';
 const _kGoogleEventPrefix = '__gcal_event_id_';
 const _kVipKey = 'tracker_vip_key';
 
+/// System-locale fallback for calendar event titles (no BuildContext here).
+String _untitledFallback() {
+  try {
+    if (PlatformDispatcher.instance.locale.languageCode == 'fr') return 'Sans titre';
+  } catch (_) {}
+  return 'Untitled';
+}
+
 class GoogleCalendarService {
   static final GoogleSignIn _googleSignIn = GoogleSignIn(
     clientId: hasGoogleClientId ? googleClientId : null,
@@ -172,8 +180,8 @@ class GoogleCalendarService {
     final existingId = map[key];
 
     final event = Event(
-      summary: task.name.isEmpty ? 'Untitled' : task.name,
-      description: 'Status: $status${note.isNotEmpty ? '\nNote: $note' : ''}\nFrom Tracker Sheet',
+      summary: task.name.isEmpty ? _untitledFallback() : task.name,
+      description: 'Status: $status${note.isNotEmpty ? '\nNote: $note' : ''}\nFrom 4cus',
       start: EventDateTime(dateTime: start),
       end: EventDateTime(dateTime: end),
       colorId: _colorForStatus(status),

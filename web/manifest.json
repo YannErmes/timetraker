@@ -1,11 +1,11 @@
 {
-    "name": "tracker_sheet",
-    "short_name": "tracker_sheet",
+    "name": "4cus",
+    "short_name": "4cus",
     "start_url": ".",
     "display": "standalone",
     "background_color": "#0175C2",
     "theme_color": "#0175C2",
-    "description": "A new Flutter project.",
+    "description": "4cus — focus on what matters, one day at a time.",
     "orientation": "portrait-primary",
     "prefer_related_applications": false,
     "icons": [

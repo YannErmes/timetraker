@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:tracker_sheet/l10n/app_localizations.dart';
 import '../../config/app_colors.dart';
 import '../../models/timer_value.dart';
 import '../../providers/app_providers.dart';
@@ -98,23 +99,24 @@ class _TimerCellState extends ConsumerState<TimerCell> {
   }
 
   Future<void> _promptDuration() async {
+    final loc = AppLocalizations.of(context)!;
     final ctrl = TextEditingController();
     final res = await showDialog<String>(
       context: context,
       builder: (_) => AlertDialog(
         backgroundColor: AppColors.surface,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8), side: const BorderSide(color: AppColors.border)),
-        title: const Text('Set duration', style: TextStyle(color: AppColors.textPrimary)),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8), side: BorderSide(color: AppColors.border)),
+        title: Text(loc.setDurationBtn, style: TextStyle(color: AppColors.textPrimary)),
         content: TextField(
           controller: ctrl,
           autofocus: true,
-          style: const TextStyle(color: AppColors.textPrimary),
-          decoration: const InputDecoration(labelText: 'e.g. 4h, 30min, 1h 20m', hintText: '4h'),
+          style: TextStyle(color: AppColors.textPrimary),
+          decoration: InputDecoration(labelText: loc.durationExample, hintText: '4h'),
           onSubmitted: (v) => Navigator.pop(context, v),
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
-          FilledButton(onPressed: () => Navigator.pop(context, ctrl.text), child: const Text('Save')),
+          TextButton(onPressed: () => Navigator.pop(context), child: Text(loc.cancel)),
+          FilledButton(onPressed: () => Navigator.pop(context, ctrl.text), child: Text(loc.save)),
         ],
       ),
     );
@@ -140,6 +142,7 @@ class _EmptyTimer extends StatelessWidget {
   const _EmptyTimer({required this.onSet});
   @override
   Widget build(BuildContext context) {
+    final loc = AppLocalizations.of(context)!;
     return InkWell(
       borderRadius: BorderRadius.circular(8),
       onTap: onSet,
@@ -147,10 +150,10 @@ class _EmptyTimer extends StatelessWidget {
         height: 32,
         decoration: BoxDecoration(color: AppColors.inputFill, borderRadius: BorderRadius.circular(8), border: Border.all(color: AppColors.inputBorder, style: BorderStyle.solid)),
         alignment: Alignment.center,
-        child: const Row(mainAxisAlignment: MainAxisAlignment.center, mainAxisSize: MainAxisSize.min, children: [
+        child: Row(mainAxisAlignment: MainAxisAlignment.center, mainAxisSize: MainAxisSize.min, children: [
           Icon(Icons.hourglass_empty, size: 12, color: AppColors.textSecondary),
           SizedBox(width: 4),
-          Flexible(child: Text('Set duration', style: TextStyle(fontSize: 10, color: AppColors.textSecondary), overflow: TextOverflow.ellipsis)),
+          Flexible(child: Text(loc.setDurationBtn, style: TextStyle(fontSize: 10, color: AppColors.textSecondary), overflow: TextOverflow.ellipsis)),
         ]),
       ),
     );
@@ -216,6 +219,7 @@ class _TimerDialogState extends ConsumerState<_TimerDialog> {
   Widget build(BuildContext context) {
     ref.watch(entriesProvider);
 
+    final loc = AppLocalizations.of(context)!;
     final eff = _tv.effectiveElapsed(DateTime.now());
     final remaining = _tv.remainingSec;
     final progress = _tv.progress;
@@ -224,25 +228,25 @@ class _TimerDialogState extends ConsumerState<_TimerDialog> {
 
     return AlertDialog(
       backgroundColor: AppColors.surface,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8), side: const BorderSide(color: AppColors.border)),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8), side: BorderSide(color: AppColors.border)),
       title: Row(children: [
-        const Icon(Icons.hourglass_bottom_rounded, size: 18, color: AppColors.accent),
+        Icon(Icons.hourglass_bottom_rounded, size: 18, color: AppColors.accent),
         const SizedBox(width: 8),
-        const Text('Timer', style: TextStyle(color: AppColors.textPrimary, fontSize: 16)),
+        Text(loc.timerTitle, style: TextStyle(color: AppColors.textPrimary, fontSize: 16)),
         const Spacer(),
         IconButton(
-          icon: const Icon(Icons.edit, size: 16, color: AppColors.textSecondary),
-          tooltip: 'Edit duration',
+          icon: Icon(Icons.edit, size: 16, color: AppColors.textSecondary),
+          tooltip: loc.editDurationTip,
           onPressed: () async {
             final ctrl = TextEditingController(text: TimerValue.formatSec(_tv.durationSec));
             final res = await showDialog<String>(
               context: context,
               builder: (_) => AlertDialog(
                 backgroundColor: AppColors.surface,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8), side: const BorderSide(color: AppColors.border)),
-                title: const Text('Edit duration', style: TextStyle(color: AppColors.textPrimary)),
-                content: TextField(controller: ctrl, autofocus: true, style: const TextStyle(color: AppColors.textPrimary), decoration: const InputDecoration(labelText: 'Duration')),
-                actions: [TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')), FilledButton(onPressed: () => Navigator.pop(context, ctrl.text), child: const Text('Save'))],
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8), side: BorderSide(color: AppColors.border)),
+                title: Text(loc.editDurationTitle, style: TextStyle(color: AppColors.textPrimary)),
+                content: TextField(controller: ctrl, autofocus: true, style: TextStyle(color: AppColors.textPrimary), decoration: InputDecoration(labelText: loc.durationLbl)),
+                actions: [TextButton(onPressed: () => Navigator.pop(context), child: Text(loc.cancel)), FilledButton(onPressed: () => Navigator.pop(context, ctrl.text), child: Text(loc.save))],
               ),
             );
             if (res != null && res.trim().isNotEmpty) {
@@ -270,24 +274,24 @@ class _TimerDialogState extends ConsumerState<_TimerDialog> {
           ),
           const SizedBox(height: 16),
           Text(TimerValue.formatSec(remaining), style: TextStyle(fontSize: 32, fontWeight: FontWeight.w800, color: isDone ? AppColors.doneText : AppColors.textPrimary)),
-          Text(isRunning ? 'remaining' : (isDone ? 'completed' : 'paused'), style: const TextStyle(fontSize: 11, color: AppColors.textSecondary, letterSpacing: 0.6)),
+          Text(isRunning ? loc.remainingLbl : (isDone ? loc.completedLbl : loc.pausedLbl), style: TextStyle(fontSize: 11, color: AppColors.textSecondary, letterSpacing: 0.6)),
           const SizedBox(height: 8),
-          Text('${TimerValue.formatSec(eff)} elapsed / ${TimerValue.formatSec(_tv.durationSec)} total', style: const TextStyle(fontSize: 11, color: AppColors.textSecondary)),
+          Text(loc.elapsedOf(TimerValue.formatSec(eff), TimerValue.formatSec(_tv.durationSec)), style: TextStyle(fontSize: 11, color: AppColors.textSecondary)),
           const SizedBox(height: 20),
           Wrap(spacing: 8, runSpacing: 8, alignment: WrapAlignment.center, children: [
             if (!isRunning && !isDone)
-              FilledButton.icon(onPressed: remaining == _tv.durationSec ? () => _persist(_tv.started(DateTime.now())) : () => _persist(_tv.started(DateTime.now())), icon: const Icon(Icons.play_arrow, size: 16), label: Text(remaining == _tv.durationSec ? 'Start' : 'Resume')),
-            if (isRunning) FilledButton.icon(onPressed: () => _persist(_tv.paused(DateTime.now())), icon: const Icon(Icons.pause, size: 16), label: const Text('Pause'), style: FilledButton.styleFrom(backgroundColor: AppColors.inputFill, foregroundColor: AppColors.textPrimary, side: const BorderSide(color: AppColors.border))),
-            FilledButton.icon(onPressed: () => _persist(_tv.stopped()), icon: const Icon(Icons.stop, size: 16), label: const Text('Stop'), style: FilledButton.styleFrom(backgroundColor: AppColors.cancelFill, foregroundColor: AppColors.cancelText, side: const BorderSide(color: AppColors.cancelBorder))),
-            FilledButton.icon(onPressed: () => _persist(_tv.restarted(DateTime.now())), icon: const Icon(Icons.restart_alt, size: 16), label: const Text('Restart')),
+              FilledButton.icon(onPressed: remaining == _tv.durationSec ? () => _persist(_tv.started(DateTime.now())) : () => _persist(_tv.started(DateTime.now())), icon: const Icon(Icons.play_arrow, size: 16), label: Text(remaining == _tv.durationSec ? loc.startBtn : loc.resumeBtn)),
+            if (isRunning) FilledButton.icon(onPressed: () => _persist(_tv.paused(DateTime.now())), icon: Icon(Icons.pause, size: 16), label: Text(loc.pauseBtn), style: FilledButton.styleFrom(backgroundColor: AppColors.inputFill, foregroundColor: AppColors.textPrimary, side: BorderSide(color: AppColors.border))),
+            FilledButton.icon(onPressed: () => _persist(_tv.stopped()), icon: Icon(Icons.stop, size: 16), label: Text(loc.stopBtn), style: FilledButton.styleFrom(backgroundColor: AppColors.cancelFill, foregroundColor: AppColors.cancelText, side: BorderSide(color: AppColors.cancelBorder))),
+            FilledButton.icon(onPressed: () => _persist(_tv.restarted(DateTime.now())), icon: const Icon(Icons.restart_alt, size: 16), label: Text(loc.restartBtn)),
           ]),
           if (isDone) ...[
             const SizedBox(height: 12),
-            Container(padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6), decoration: BoxDecoration(color: AppColors.doneFill, borderRadius: BorderRadius.circular(8), border: Border.all(color: AppColors.doneBorder)), child: const Text('Completed', style: TextStyle(color: AppColors.doneText, fontSize: 11, fontWeight: FontWeight.w700))),
+            Container(padding: EdgeInsets.symmetric(horizontal: 10, vertical: 6), decoration: BoxDecoration(color: AppColors.doneFill, borderRadius: BorderRadius.circular(8), border: Border.all(color: AppColors.doneBorder)), child: Text(loc.completedBadge, style: TextStyle(color: AppColors.doneText, fontSize: 11, fontWeight: FontWeight.w700))),
           ]
         ]),
       ),
-      actions: [TextButton(onPressed: () => Navigator.pop(context), child: const Text('Close'))],
+      actions: [TextButton(onPressed: () => Navigator.pop(context), child: Text(loc.close))],
     );
   }
 }

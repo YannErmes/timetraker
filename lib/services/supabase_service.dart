@@ -16,6 +16,20 @@ import 'notification_service.dart';
 
 const _uuid = Uuid();
 
+/// System-locale fallback names for notifications (no BuildContext here).
+bool get _isFr {
+  try {
+    return PlatformDispatcher.instance.locale.languageCode == 'fr';
+  } catch (_) {
+    return false;
+  }
+}
+
+String _fallbackTaskName(String? name) {
+  if (name != null && name.isNotEmpty) return name;
+  return _isFr ? 'Sans titre' : 'Untitled';
+}
+
 /// Where the data currently on screen comes from.
 enum SyncStatus {
   loading, // contacting the cloud
@@ -636,6 +650,21 @@ class SupabaseService {
     }
   }
 
+  /// Id of the immediate next task to do for [date]: the first task in
+  /// position order with a checked (scheduled) entry whose status is
+  /// neither done nor cancelled. Null when the day is fully done.
+  String? nextUpTaskId(DateTime date) {
+    final sorted = List<Task>.from(_tasks)..sort((a, b) => a.position.compareTo(b.position));
+    final statusCol = _columns.where((c) => c.type == ColumnType.status).firstOrNull;
+    for (final t in sorted) {
+      final e = entryFor(t.id, date);
+      if (e == null || !e.checked) continue;
+      final s = statusCol == null ? null : e.data[statusCol.id] as String?;
+      if (s == 'done' || s == 'cancel' || s == 'cancelled') continue;
+      return t.id;
+    }
+    return null;
+  }
   Future<void> upsertEntry(DayEntry entry) async {
     final idx = _entries.indexWhere((e) => e.id == entry.id);
     if (idx >= 0) {
@@ -769,16 +798,16 @@ class SupabaseService {
           await upsertEntry(withStatus);
           // notify: timer done
           final task = _tasks.where((t) => t.id == e.taskId).firstOrNull;
-          await NotificationService.instance.showTimerDone(task?.name.isEmpty == true ? 'Task' : (task?.name ?? 'Task'));
+          await NotificationService.instance.showTimerDone(_fallbackTaskName(task?.name));
           // also send next tasks for the day after a short delay
           Future.delayed(const Duration(seconds: 2), () async {
             final nextEntries = _entries.where((en) => en.checked && en.date.year == now.year && en.date.month == now.month && en.date.day == now.day && en.taskId != e.taskId).take(3).toList();
             if (nextEntries.isNotEmpty) {
               final names = nextEntries.map((en) {
                 final t = _tasks.where((tt) => tt.id == en.taskId).firstOrNull;
-                return t?.name.isEmpty == true ? 'Untitled' : (t?.name ?? 'Task');
+                return _fallbackTaskName(t?.name);
               }).join(', ');
-              await NotificationService.instance.showNextTasks('Next: $names');
+              await NotificationService.instance.showNextTasks('${_isFr ? 'Suivant' : 'Next'}: $names');
             }
           });
         } else if (tv.running) {
@@ -794,7 +823,7 @@ class SupabaseService {
             if (remaining > mins * 60 && remaining < tv.durationSec) {
               final task = _tasks.where((t) => t.id == e.taskId).firstOrNull;
               final total = Duration(seconds: tv.durationSec);
-              unawaited(NotificationService.instance.scheduleTimerReminder(taskName: task?.name ?? 'Task', total: total, minutesBefore: mins));
+              unawaited(NotificationService.instance.scheduleTimerReminder(taskName: _fallbackTaskName(task?.name), total: total, minutesBefore: mins));
             }
           }
         }
@@ -925,7 +954,20 @@ class SupabaseService {
   Future<void> signOut() async {
     await _identity.signOut();
   }
-  // legacy email methods kept as no-op for compat (not used)
+
+  /// Sends a user suggestion to the public inbox (Supabase `suggestions`).
+  /// Throws on failure so the UI can show the error.
+  Future<void> submitSuggestion({required String name, required String message}) async {
+    if (!isConfigured) throw StateError('Cloud is not configured in this build.');
+    final clean = message.trim();
+    if (clean.isEmpty) throw ArgumentError('Please write your suggestion first.');
+    await _client!.from('suggestions').insert({
+      'id': _uuid.v4(),
+      'user_id': userId,
+      'name': name.trim(),
+      'message': clean,
+    });
+  }  // legacy email methods kept as no-op for compat (not used)
   Future<void> signUp(String email, String password) async => throw UnimplementedError('Use name-based identity');
   Future<void> signIn(String email, String password) async => throw UnimplementedError('Use name-based identity');
 }

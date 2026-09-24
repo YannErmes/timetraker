@@ -42,3 +42,14 @@ final viewModeProvider = StateProvider<ViewMode>((ref) => ViewMode.weekly);
 final isFilterSidebarCollapsedProvider = StateProvider<bool>((ref) => false);
 
 enum ViewMode { weekly, daily, monthly }
+
+/// Request to open the note editor sidebar for one day-cell.
+class NoteEditorRequest {
+  final String taskId;
+  final DateTime date;
+  final String columnId;
+  const NoteEditorRequest({required this.taskId, required this.date, required this.columnId});
+}
+
+/// When non-null, HomeScreen swaps the end drawer to the note editor.
+final noteEditorRequestProvider = StateProvider<NoteEditorRequest?>((ref) => null);
