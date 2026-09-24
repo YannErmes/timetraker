@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../config/app_colors.dart';
+import '../config/supabase_config.dart';
 import '../providers/app_providers.dart';
 
 class AuthScreen extends ConsumerStatefulWidget {
@@ -79,6 +80,18 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
                   onSubmitted: (_) => _submit(),
                 ),
                 const SizedBox(height: 8),
+                if (!isSupabaseConfigured) ...[
+                  Container(
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(color: const Color(0xFFF59E0B).withValues(alpha: 0.12), borderRadius: BorderRadius.circular(8), border: Border.all(color: const Color(0xFFF59E0B).withValues(alpha: 0.5))),
+                    child: const Row(children: [
+                      Icon(Icons.warning_amber_rounded, size: 14, color: Color(0xFFF59E0B)),
+                      SizedBox(width: 8),
+                      Expanded(child: Text('Cloud is NOT configured in this build — data will stay on THIS device only and will not appear on your other devices.', style: TextStyle(fontSize: 11, color: AppColors.textPrimary, fontWeight: FontWeight.w600))),
+                    ]),
+                  ),
+                  const SizedBox(height: 8),
+                ],
                 Container(
                   padding: const EdgeInsets.all(10),
                   decoration: BoxDecoration(color: AppColors.inputFill, borderRadius: BorderRadius.circular(8), border: Border.all(color: AppColors.border)),

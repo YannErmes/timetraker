@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../config/app_colors.dart';
 import '../providers/app_providers.dart';
+import '../services/supabase_service.dart';
 import '../widgets/weekly_grid.dart';
 import '../widgets/daily_view.dart';
 import '../widgets/monthly_view.dart';
@@ -9,15 +10,27 @@ import '../widgets/column_settings_panel.dart';
 import '../widgets/view_settings.dart';
 import '../widgets/filter_sidebar.dart';
 
-class HomeScreen extends ConsumerWidget {
+class HomeScreen extends ConsumerStatefulWidget {
   const HomeScreen({super.key});
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<HomeScreen> createState() => _HomeScreenState();
+}
+
+class _HomeScreenState extends ConsumerState<HomeScreen> {
+  final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
+
+  void _openColumnManager() {
+    _scaffoldKey.currentState?.openEndDrawer();
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final view = ref.watch(viewModeProvider);
     final svc = ref.watch(supabaseServiceProvider);
     final identity = ref.watch(identityServiceProvider);
     final isMobile = MediaQuery.of(context).size.width < 700;
     return Scaffold(
+      key: _scaffoldKey,
       backgroundColor: AppColors.bg,
       appBar: AppBar(
         backgroundColor: AppColors.header,
@@ -44,6 +57,7 @@ class HomeScreen extends ConsumerWidget {
           ]);
         }),
         actions: [
+          _SyncStatusButton(svc: svc, email: identity.name),
           if (!isMobile) ...[
             SegmentedButton<ViewMode>(
               segments: const [
@@ -70,15 +84,19 @@ class HomeScreen extends ConsumerWidget {
           ),
           const ViewSettingsButton(),
           if (!isMobile) ...[
-            IconButton(icon: const Icon(Icons.view_column, color: AppColors.textSecondary), tooltip: 'Manage Columns', onPressed: () => Scaffold.of(context).openEndDrawer()),
+            IconButton(icon: const Icon(Icons.view_column, color: AppColors.textSecondary), tooltip: 'Manage Columns', onPressed: _openColumnManager),
             IconButton(icon: const Icon(Icons.analytics_outlined, color: AppColors.textSecondary), tooltip: 'Analytics', onPressed: () => _showAnalytics(context, ref)),
           ] else ...[
             PopupMenuButton<String>(
               icon: const Icon(Icons.more_horiz, color: AppColors.textSecondary),
               tooltip: 'More',
               onSelected: (v) async {
-                if (v == 'columns') Scaffold.of(context).openEndDrawer();
+                if (v == 'columns') _openColumnManager();
                 if (v == 'analytics') _showAnalytics(context, ref);
+                if (v == 'reload') {
+                  await svc.reloadFromCloud();
+                  return;
+                }
                 if (v == 'change') {
                   final ok = await showDialog<bool>(
                     context: context,
@@ -96,6 +114,7 @@ class HomeScreen extends ConsumerWidget {
               itemBuilder: (_) => [
                 const PopupMenuItem(value: 'columns', child: Text('Manage Columns')),
                 const PopupMenuItem(value: 'analytics', child: Text('Analytics')),
+                const PopupMenuItem(value: 'reload', child: Text('Reload from cloud')),
                 PopupMenuItem(value: 'change', child: Text('Signed in as "${identity.name ?? ''}"')),
                 const PopupMenuItem(value: 'change', child: Text('Sign out / change name')),
               ],
@@ -106,6 +125,10 @@ class HomeScreen extends ConsumerWidget {
               icon: const Icon(Icons.person_rounded, color: AppColors.textSecondary),
               tooltip: identity.name ?? 'Account',
               onSelected: (v) async {
+                if (v == 'reload') {
+                  await svc.reloadFromCloud();
+                  return;
+                }
                 if (v == 'change') {
                   final ok = await showDialog<bool>(
                     context: context,
@@ -122,6 +145,7 @@ class HomeScreen extends ConsumerWidget {
               },
               itemBuilder: (_) => [
                 PopupMenuItem(value: 'change', child: Text('Signed in as "${identity.name ?? ''}" — change name')),
+                const PopupMenuItem(value: 'reload', child: Text('Reload from cloud')),
                 const PopupMenuItem(value: 'change', child: Text('Sign out / change name')),
               ],
             ),
@@ -178,9 +202,12 @@ class HomeScreen extends ConsumerWidget {
               ]),
             )
           : null,
-      body: isMobile
-          ? _mobileBody(view)
-          : Row(children: [
+      body: Column(children: [
+        _SyncBanner(svc: svc),
+        Expanded(
+          child: isMobile
+              ? _mobileBody(view)
+              : Row(children: [
               AnimatedContainer(
                 duration: const Duration(milliseconds: 250),
                 curve: Curves.easeInOut,
@@ -204,7 +231,9 @@ class HomeScreen extends ConsumerWidget {
                 ),
               ),
               Expanded(child: _desktopBody(view)),
-            ]),
+                ]),
+        ),
+      ]),
       floatingActionButton: isMobile
           ? FloatingActionButton(
               backgroundColor: AppColors.accent,
@@ -368,6 +397,97 @@ class HomeScreen extends ConsumerWidget {
         ),
         actions: [TextButton(onPressed: () => Navigator.pop(context), child: const Text('Close'))],
       ),
+    );
+  }
+}
+
+/// AppBar cloud-sync indicator. Green = live cloud data, amber = offline
+/// cache, red = failed, grey = demo/loading. Tap to reload from cloud.
+class _SyncStatusButton extends StatelessWidget {
+  final SupabaseService svc;
+  final String? email;
+  const _SyncStatusButton({required this.svc, required this.email});
+  @override
+  Widget build(BuildContext context) {
+    return ValueListenableBuilder<SyncStatus>(
+      valueListenable: svc.syncStatus,
+      builder: (_, status, _) {
+        IconData icon;
+        Color color;
+        String label;
+        switch (status) {
+          case SyncStatus.cloud:
+            icon = Icons.cloud_done_outlined;
+            color = const Color(0xFF22C55E);
+            label = 'Cloud sync: connected';
+            break;
+          case SyncStatus.offlineCache:
+            icon = Icons.cloud_off_outlined;
+            color = const Color(0xFFF59E0B);
+            label = 'Cloud sync: offline — showing saved data';
+            break;
+          case SyncStatus.demo:
+            icon = Icons.cloud_off_outlined;
+            color = AppColors.textSecondary;
+            label = 'Demo mode: cloud not configured — data stays on this device';
+            break;
+          case SyncStatus.error:
+            icon = Icons.error_outline;
+            color = const Color(0xFFF43F5E);
+            label = 'Cloud sync failed';
+            break;
+          case SyncStatus.loading:
+            icon = Icons.cloud_sync_outlined;
+            color = AppColors.textSecondary;
+            label = 'Connecting to cloud…';
+            break;
+        }
+        final detail = svc.syncError;
+        return IconButton(
+          icon: Icon(icon, color: color, size: 20),
+          tooltip: '$label\nSigned in as ${email ?? '?'}.${detail != null ? '\n$detail' : ''}\nTap to reload from cloud.',
+          onPressed: () => svc.reloadFromCloud(),
+        );
+      },
+    );
+  }
+}
+
+/// Full-width banner shown only when NOT on live cloud data, so a wrong
+/// state (demo build, offline, failed fetch) is impossible to miss.
+class _SyncBanner extends StatelessWidget {
+  final SupabaseService svc;
+  const _SyncBanner({required this.svc});
+  @override
+  Widget build(BuildContext context) {
+    return ValueListenableBuilder<SyncStatus>(
+      valueListenable: svc.syncStatus,
+      builder: (_, status, _) {
+        if (status == SyncStatus.cloud || status == SyncStatus.loading) {
+          return const SizedBox.shrink();
+        }
+        final isDemo = status == SyncStatus.demo;
+        final bg = isDemo ? AppColors.inputFill : const Color(0xFFF43F5E).withValues(alpha: 0.12);
+        final border = isDemo ? AppColors.border : const Color(0xFFF43F5E).withValues(alpha: 0.5);
+        final text = isDemo
+            ? 'Demo mode — cloud is not configured in this build, so data stays on THIS device only.'
+            : (svc.syncError ?? 'Could not reach the cloud.');
+        return Container(
+          width: double.infinity,
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          decoration: BoxDecoration(color: bg, border: Border(bottom: BorderSide(color: border))),
+          child: Row(children: [
+            Icon(isDemo ? Icons.cloud_off_outlined : Icons.error_outline, size: 16, color: isDemo ? AppColors.textSecondary : const Color(0xFFF43F5E)),
+            const SizedBox(width: 8),
+            Expanded(child: Text(text, style: const TextStyle(fontSize: 11, color: AppColors.textPrimary))),
+            TextButton(
+              onPressed: () => svc.reloadFromCloud(),
+              style: TextButton.styleFrom(padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4), minimumSize: Size.zero, tapTargetSize: MaterialTapTargetSize.shrinkWrap),
+              child: const Text('Retry', style: TextStyle(fontSize: 11)),
+            ),
+          ]),
+        );
+      },
     );
   }
 }

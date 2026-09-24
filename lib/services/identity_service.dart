@@ -49,6 +49,19 @@ class IdentityService {
   final _controller = StreamController<Identity?>.broadcast();
   Stream<Identity?> get stream => _controller.stream;
 
+  /// Deterministic per-email ID so the SAME email always maps to the SAME
+  /// user_id on every device — even when signing in offline or when Supabase
+  /// is unreachable. Online lookup of app_users by name still wins for
+  /// existing accounts; this is only the fallback so two devices never
+  /// diverge into two accounts for one email.
+  String _deterministicId(String canonicalName) {
+    try {
+      return _uuid.v5(Namespace.url.value, 'tracker-sheet:$canonicalName');
+    } catch (_) {
+      return _uuid.v4();
+    }
+  }
+
   Future<void> init() async {
     final prefs = await SharedPreferences.getInstance();
     // support both old _kNameKey and new _kEmailKey (email is now the identity)
@@ -61,7 +74,35 @@ class IdentityService {
       _controller.add(_identity);
       if (isSupabaseConfigured) {
         unawaited(_ensureRemote(storedEmail, storedId));
+        // Reconcile: if this email exists remotely under a DIFFERENT id
+        // (e.g. signed in offline on two devices), adopt the remote id so
+        // all devices converge on one account and see the same data.
+        unawaited(_reconcileIdentity(storedEmail, storedId));
       }
+    }
+  }
+
+  Future<void> _reconcileIdentity(String name, String localId) async {
+    try {
+      final client = Supabase.instance.client;
+      final remote = await client.from('app_users').select().eq('name', name).maybeSingle();
+      if (remote != null) {
+        final remoteId = remote['id'] as String;
+        if (remoteId != localId) {
+          debugPrint('identity reconcile: adopting remote id for $name');
+          final prefs = await SharedPreferences.getInstance();
+          await prefs.setString(_kIdKey, remoteId);
+          _identity = Identity(
+            id: remoteId,
+            name: name,
+            vipKey: _identity?.vipKey,
+            isVip: _identity?.isVip ?? false,
+          );
+          _controller.add(_identity);
+        }
+      }
+    } catch (e) {
+      debugPrint('identity reconcile failed: $e');
     }
   }
 
@@ -106,7 +147,8 @@ class IdentityService {
         if (storedName == canonicalName && storedId != null) {
           id = storedId;
         } else {
-          id = _uuid.v4();
+          // Deterministic so phone + web converge on the same account.
+          id = _deterministicId(canonicalName);
         }
       }
     } else {
@@ -116,7 +158,8 @@ class IdentityService {
       if (storedName == canonicalName && storedId != null) {
         id = storedId;
       } else {
-        id = _uuid.v4();
+        // Deterministic so phone + web converge on the same account.
+        id = _deterministicId(canonicalName);
       }
     }
 

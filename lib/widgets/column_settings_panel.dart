@@ -49,9 +49,9 @@ class ColumnSettingsPanel extends ConsumerWidget {
                 final c = cols[i];
                 final hidden = ref.watch(columnVisibilityProvider).contains(c.id);
                 return Opacity(
+                  key: ValueKey(c.id),
                   opacity: hidden ? 0.55 : 1.0,
                   child: Container(
-                    key: ValueKey(c.id),
                     margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                     decoration: BoxDecoration(color: hidden ? AppColors.bg : AppColors.inputFill, borderRadius: BorderRadius.circular(8), border: Border.all(color: hidden ? AppColors.border.withValues(alpha: 0.6) : AppColors.border)),
                     child: ListTile(

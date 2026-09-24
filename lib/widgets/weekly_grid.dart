@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../config/app_colors.dart';
@@ -25,6 +27,56 @@ class _WeeklyGridState extends ConsumerState<WeeklyGrid> {
   bool _hScrolled = false;
   int _dayPage = 0;
   int _rowPage = 0;
+  String? _flashDayKey; // dateKey of the day column to flash-highlight
+  Timer? _flashTimer;
+
+  String _dateKey(DateTime d) =>
+      '${d.year.toString().padLeft(4, '0')}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
+
+  /// Jump to the current week, scroll today's column into view and flash it.
+  void _goToday() {
+    final now = DateTime.now();
+    final todayNorm = normalizeDate(now);
+    ref.read(selectedDateProvider.notifier).state = now;
+    // Ensure the day-page containing today is shown.
+    final prefs = ref.read(displayPrefsProvider);
+    final allDays = weekDates(now);
+    final daysVisible = prefs.daysVisible == 0 ? allDays.length : prefs.daysVisible;
+    final todayIdx = allDays.indexWhere((d) => normalizeDate(d) == todayNorm);
+    setState(() {
+      _dayPage = todayIdx >= 0 ? todayIdx ~/ daysVisible : 0;
+      _flashDayKey = _dateKey(todayNorm);
+    });
+    _flashTimer?.cancel();
+    _flashTimer = Timer(const Duration(milliseconds: 1600), () {
+      if (mounted) setState(() => _flashDayKey = null);
+    });
+    WidgetsBinding.instance.addPostFrameCallback((_) => _scrollToDayColumn(todayNorm));
+  }
+
+  /// Horizontally scroll today's day-column into the center of the viewport.
+  void _scrollToDayColumn(DateTime todayNorm) {
+    if (!_hBodyCtrl.hasClients) return;
+    final svc = ref.read(supabaseServiceProvider);
+    final hidden = ref.read(columnVisibilityProvider);
+    final cols = svc.columns.where((c) => !hidden.contains(c.id)).toList();
+    const checkboxWidth = 48.0;
+    const colWidth = 132.0;
+    final dayWidth = checkboxWidth + cols.length * colWidth;
+    final anchor = ref.read(selectedDateProvider);
+    final prefs = ref.read(displayPrefsProvider);
+    final allDays = weekDates(anchor);
+    final daysVisible = prefs.daysVisible == 0 ? allDays.length : prefs.daysVisible;
+    final dayPages = (allDays.length / daysVisible).ceil();
+    final page = _dayPage.clamp(0, dayPages - 1);
+    final days = allDays.skip(page * daysVisible).take(daysVisible).toList();
+    final ti = days.indexWhere((d) => normalizeDate(d) == todayNorm);
+    if (ti < 0) return;
+    final pos = _hBodyCtrl.position;
+    if (pos.maxScrollExtent <= 0) return;
+    final target = (ti * dayWidth + dayWidth / 2 - pos.viewportDimension / 2).clamp(0.0, pos.maxScrollExtent);
+    _hBodyCtrl.animateTo(target, duration: const Duration(milliseconds: 450), curve: Curves.easeInOut);
+  }
 
   @override
   void initState() {
@@ -51,6 +103,7 @@ class _WeeklyGridState extends ConsumerState<WeeklyGrid> {
 
   @override
   void dispose() {
+    _flashTimer?.cancel();
     _hHeaderCtrl.dispose();
     _hBodyCtrl.dispose();
     _vCtrl.dispose();
@@ -103,7 +156,7 @@ class _WeeklyGridState extends ConsumerState<WeeklyGrid> {
               IconButton(icon: const Icon(Icons.chevron_right, size: 18), tooltip: 'Next days', onPressed: _dayPage < dayPages - 1 ? () => setState(() => _dayPage++) : null),
               const SizedBox(width: 4),
             ],
-            OutlinedButton(onPressed: () => ref.read(selectedDateProvider.notifier).state = DateTime.now(), child: const Text('Today')),
+            OutlinedButton(onPressed: _goToday, child: const Text('Today')),
             const SizedBox(width: 8),
             FilledButton.icon(onPressed: () => _addTaskDialog(context), icon: const Icon(Icons.add, size: 16), label: const Text('Add task')),
           ]),
@@ -140,16 +193,36 @@ class _WeeklyGridState extends ConsumerState<WeeklyGrid> {
       height: 64,
       child: Row(children: [
         for (final d in days)
-          SizedBox(
-            width: checkboxWidth + cols.length * colWidth,
-            child: Column(children: [
+          Builder(builder: (_) {
+            final flash = _flashDayKey != null && _dateKey(d) == _flashDayKey;
+            return Container(
+              width: checkboxWidth + cols.length * colWidth,
+              decoration: flash
+                  ? BoxDecoration(
+                      color: AppColors.accent.withValues(alpha: 0.14),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: AppColors.accent.withValues(alpha: 0.55)),
+                    )
+                  : null,
+              child: Column(children: [
               Container(height: 28, color: AppColors.header, alignment: Alignment.center, child: Text(formatWeekday(d), style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: AppColors.textPrimary, letterSpacing: 0.6))),
               SizedBox(height: 36, child: Row(children: [
-                SizedBox(width: checkboxWidth, child: Center(child: Text(formatDayHeader(d), style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: AppColors.textSecondary)))),
-                for (final col in cols) SizedBox(width: colWidth, child: Center(child: Text(col.label, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: AppColors.textPrimary)))),
+                SizedBox(
+                  width: checkboxWidth,
+                  child: Center(
+                    // Shrink the date to fit instead of wrapping to a second
+                    // line (which overflowed the fixed 64px header by ~2px).
+                    child: FittedBox(
+                      fit: BoxFit.scaleDown,
+                      child: Text(formatDayHeader(d), style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: AppColors.textSecondary), maxLines: 1),
+                    ),
+                  ),
+                ),
+                for (final col in cols) SizedBox(width: colWidth, child: Center(child: Text(col.label, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: AppColors.textPrimary), maxLines: 1, overflow: TextOverflow.ellipsis))),
               ])),
             ]),
-          ),
+          );
+        }),
       ]),
     );
 
@@ -205,7 +278,7 @@ class _WeeklyGridState extends ConsumerState<WeeklyGrid> {
 
     Widget rightColumn = Column(children: [
       for (int r = 0; r < tasks.length; r++)
-        _RightTaskRow(task: tasks[r], days: days, cols: cols, isAlt: r % 2 == 1),
+        _RightTaskRow(task: tasks[r], days: days, cols: cols, isAlt: r % 2 == 1, flashDayKey: _flashDayKey),
     ]);
 
     Widget bodyRowScrollable = Row(
@@ -364,7 +437,10 @@ class _RightTaskRow extends ConsumerWidget {
   final List<DateTime> days;
   final List<ColumnDefinition> cols;
   final bool isAlt;
-  const _RightTaskRow({required this.task, required this.days, required this.cols, required this.isAlt});
+  final String? flashDayKey;
+  const _RightTaskRow({required this.task, required this.days, required this.cols, required this.isAlt, this.flashDayKey});
+  String _dateKey(DateTime d) =>
+      '${d.year.toString().padLeft(4, '0')}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final svc = ref.watch(supabaseServiceProvider);
@@ -374,8 +450,14 @@ class _RightTaskRow extends ConsumerWidget {
       decoration: BoxDecoration(color: rowBg, border: const Border(bottom: BorderSide(color: AppColors.border, width: 1))),
       child: Row(children: [
         for (final d in days) ...[
-          Container(width: 48, height: 48, alignment: Alignment.center, decoration: const BoxDecoration(border: Border(left: BorderSide(color: AppColors.border))), child: Builder(builder: (_) { final e = svc.entryFor(task.id, d); final checked = e?.checked ?? false; return Checkbox(value: checked, onChanged: (v) => svc.toggleChecked(task.id, d, v ?? false), visualDensity: VisualDensity.compact, materialTapTargetSize: MaterialTapTargetSize.shrinkWrap); })),
-          for (final col in cols) Container(width: 132, height: 48, padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 8), decoration: const BoxDecoration(border: Border(left: BorderSide(color: AppColors.border))), alignment: Alignment.center, child: _Cell(taskId: task.id, date: d, col: col)),
+          Builder(builder: (_) {
+            final flash = flashDayKey != null && _dateKey(d) == flashDayKey;
+            final flashBg = flash ? AppColors.accent.withValues(alpha: 0.12) : null;
+            return Row(mainAxisSize: MainAxisSize.min, children: [
+              Container(width: 48, height: 48, alignment: Alignment.center, decoration: BoxDecoration(color: flashBg, border: const Border(left: BorderSide(color: AppColors.border))), child: Builder(builder: (_) { final e = svc.entryFor(task.id, d); final checked = e?.checked ?? false; return Checkbox(value: checked, onChanged: (v) => svc.toggleChecked(task.id, d, v ?? false), visualDensity: VisualDensity.compact, materialTapTargetSize: MaterialTapTargetSize.shrinkWrap); })),
+              for (final col in cols) Container(width: 132, height: 48, padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 8), decoration: BoxDecoration(color: flashBg, border: const Border(left: BorderSide(color: AppColors.border))), alignment: Alignment.center, child: _Cell(taskId: task.id, date: d, col: col)),
+            ]);
+          }),
         ],
       ]),
     );

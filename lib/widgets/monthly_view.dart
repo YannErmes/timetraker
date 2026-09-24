@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../config/app_colors.dart';
@@ -11,10 +13,41 @@ import 'cells/cell_widgets.dart';
 import 'cells/timer_cell.dart';
 import '../models/timer_value.dart';
 
-class MonthlyView extends ConsumerWidget {
+class MonthlyView extends ConsumerStatefulWidget {
   const MonthlyView({super.key});
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<MonthlyView> createState() => _MonthlyViewState();
+}
+
+class _MonthlyViewState extends ConsumerState<MonthlyView> {
+  Timer? _flashTimer;
+  bool _flashToday = false;
+  final _todayKey = GlobalKey();
+
+  @override
+  void dispose() {
+    _flashTimer?.cancel();
+    super.dispose();
+  }
+
+  /// Jump to the current month, scroll today's cell into view and flash it.
+  void _goToday() {
+    ref.read(selectedDateProvider.notifier).state = DateTime.now();
+    _flashTimer?.cancel();
+    setState(() => _flashToday = true);
+    _flashTimer = Timer(const Duration(milliseconds: 1600), () {
+      if (mounted) setState(() => _flashToday = false);
+    });
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final ctx = _todayKey.currentContext;
+      if (ctx != null) {
+        Scrollable.ensureVisible(ctx, duration: const Duration(milliseconds: 450), curve: Curves.easeInOut, alignment: 0.35);
+      }
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final svc = ref.watch(supabaseServiceProvider);
     ref.watch(tasksProvider);
     ref.watch(entriesProvider);
@@ -23,6 +56,16 @@ class MonthlyView extends ConsumerWidget {
     final anchor = ref.watch(selectedDateProvider);
     final days = monthDates(anchor);
     final monthLabel = '${_monthName(anchor.month)} ${anchor.year}';
+    // Row index (0-5) of the week containing today, if today is visible in
+    // this 42-day grid — used to slightly highlight the current week row.
+    final todayNorm = normalizeDate(DateTime.now());
+    int? currentWeekRow;
+    for (int k = 0; k < days.length; k++) {
+      if (normalizeDate(days[k]) == todayNorm) {
+        currentWeekRow = k ~/ 7;
+        break;
+      }
+    }
     return Container(
       color: AppColors.bg,
       child: Column(children: [
@@ -34,7 +77,7 @@ class MonthlyView extends ConsumerWidget {
             Text(monthLabel, style: const TextStyle(fontWeight: FontWeight.w700, color: AppColors.textPrimary)),
             IconButton(icon: const Icon(Icons.chevron_right, color: AppColors.textSecondary), onPressed: () => ref.read(selectedDateProvider.notifier).state = DateTime(anchor.year, anchor.month + 1, 1)),
             const Spacer(),
-            OutlinedButton(onPressed: () => ref.read(selectedDateProvider.notifier).state = DateTime.now(), child: const Text('Today')),
+            OutlinedButton(onPressed: _goToday, child: const Text('Today')),
             const SizedBox(width: 4),
             IconButton(
               icon: const Icon(Icons.sync_rounded, size: 18, color: AppColors.textSecondary),
@@ -68,6 +111,7 @@ class MonthlyView extends ConsumerWidget {
               final d = days[i];
               final isCurrentMonth = d.month == anchor.month;
               final isToday = normalizeDate(d) == normalizeDate(DateTime.now());
+              final isCurrentWeek = currentWeekRow != null && (i ~/ 7) == currentWeekRow;
               // Checkbox = scheduled: only checked entries are considered scheduled for this day
               final allScheduled = entries.where((e) => e.dateKey == _key(d) && e.checked).toList();
               // apply global task filters to scheduled entries for this day
@@ -98,6 +142,21 @@ class MonthlyView extends ConsumerWidget {
               final scheduled = scheduledEntries.length;
               final pct = (scheduled / total).toDouble();
               final heat = _heatColor(pct);
+              // Base fill per today/current-month, with a slight accent wash
+              // across the whole current-week row so it reads as one band.
+              final baseFill = isToday
+                  ? AppColors.accent.withValues(alpha: 0.18)
+                  : isCurrentMonth
+                      ? AppColors.surface
+                      : AppColors.surface.withValues(alpha: 0.6);
+              final cellFill = (isCurrentWeek && !isToday)
+                  ? Color.alphaBlend(AppColors.accent.withValues(alpha: 0.08), baseFill)
+                  : baseFill;
+              final cellBorder = isToday
+                  ? AppColors.accent
+                  : (isCurrentWeek ? AppColors.accent.withValues(alpha: 0.4) : AppColors.border);
+              // Brief flash-boost right after tapping Today.
+              final boosting = isToday && _flashToday;
               return InkWell(
                 borderRadius: BorderRadius.circular(8),
                 onTap: () {
@@ -105,15 +164,20 @@ class MonthlyView extends ConsumerWidget {
                   showDayDetail(context, d);
                 },
                 child: Container(
+                  key: isToday ? _todayKey : null,
                   decoration: BoxDecoration(
-                    color: isToday
-                        ? AppColors.accent.withValues(alpha: 0.18)
-                        : isCurrentMonth
-                            ? AppColors.surface
-                            : AppColors.surface.withValues(alpha: 0.6),
-                    border: Border.all(color: isToday ? AppColors.accent : AppColors.border, width: isToday ? 2 : 1),
+                    color: boosting ? AppColors.accent.withValues(alpha: 0.32) : cellFill,
+                    border: Border.all(color: cellBorder, width: isToday ? (boosting ? 3 : 2) : 1),
                     borderRadius: BorderRadius.circular(8),
-                    boxShadow: isToday ? [BoxShadow(color: AppColors.accent.withValues(alpha: 0.28), blurRadius: 10, spreadRadius: 1)] : null,
+                    boxShadow: isToday
+                        ? [
+                            BoxShadow(
+                              color: AppColors.accent.withValues(alpha: boosting ? 0.55 : 0.28),
+                              blurRadius: boosting ? 18 : 10,
+                              spreadRadius: boosting ? 3 : 1,
+                            )
+                          ]
+                        : null,
                   ),
                   padding: const EdgeInsets.all(6),
                   child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [

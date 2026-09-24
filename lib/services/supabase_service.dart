@@ -16,6 +16,15 @@ import 'notification_service.dart';
 
 const _uuid = Uuid();
 
+/// Where the data currently on screen comes from.
+enum SyncStatus {
+  loading, // contacting the cloud
+  cloud, // live Supabase data
+  offlineCache, // cloud unreachable, showing last cached data
+  demo, // Supabase not configured in this build — local only
+  error, // cloud unreachable and nothing cached
+}
+
 class SupabaseService {
   final IdentityService _identity;
   final OfflineCache _cache = OfflineCache();
@@ -66,16 +75,29 @@ class SupabaseService {
   List<ColumnDefinition> get columns => _columns;
   List<DayEntry> get entries => _entries;
 
+  /// Observable sync state for the UI (AppBar icon, banners).
+  final ValueNotifier<SyncStatus> syncStatus = ValueNotifier(SyncStatus.loading);
+  String? syncError;
+
+  void _setStatus(SyncStatus s, [String? error]) {
+    syncError = error;
+    if (syncStatus.value != s) syncStatus.value = s;
+  }
+
   RealtimeChannel? _tasksCh;
   RealtimeChannel? _colsCh;
   RealtimeChannel? _entriesCh;
   StreamSubscription? _connSub;
 
   Future<void> _handleIdentityChange() async {
-    // clear old and load new identity's data
+    // Clear old account instantly (in-memory AND on screen) so the previous
+    // account's data is never visible while the new account loads from cloud.
     _tasks = [];
     _columns = [];
     _entries = [];
+    _tasksCtrl.add(_tasks);
+    _colsCtrl.add(_columns);
+    _entriesCtrl.add(_entries);
     await init();
   }
 
@@ -86,18 +108,55 @@ class SupabaseService {
     }
     if (!isConfigured) {
       await _initDemo();
+      _setStatus(SyncStatus.demo);
       _startStatusTicker();
       return;
     }
-    await _loadFromCache();
-    await _fetchAll();
+    // Cloud-first: the server is the source of truth for the signed-in email.
+    // Local cache is ONLY an offline fallback — it is never shown ahead of
+    // fresh server data. This guarantees that switching between multiple
+    // accounts on the same device can never leak one account's (or stale)
+    // data into another's view.
+    _setStatus(SyncStatus.loading);
+    try {
+      await _fetchAll();
+      _setStatus(SyncStatus.cloud);
+    } catch (e) {
+      debugPrint('cloud fetch failed, falling back to local cache: $e');
+      final hadCache = await _loadFromCache();
+      if (hadCache) {
+        _setStatus(SyncStatus.offlineCache, 'Cloud unreachable — showing last saved data. Pull to retry when online.');
+      } else {
+        _setStatus(SyncStatus.error, 'Could not reach the cloud and nothing is saved on this device: $e');
+      }
+    }
     _subscribeRealtime();
     _startStatusTicker();
     _connSub?.cancel();
     _connSub = Connectivity().onConnectivityChanged.listen((_) => _flushQueue());
   }
 
-  Future<void> _loadFromCache() async {
+  /// Manual refresh straight from the cloud (e.g. pull-to-refresh).
+  /// Never reads the cache — server rows for the current user win.
+  /// Returns true when fresh cloud data was loaded.
+  Future<bool> reloadFromCloud() async {
+    if (!isLoggedIn || userId == null || !isConfigured) return false;
+    _setStatus(SyncStatus.loading);
+    try {
+      await _fetchAll();
+      _setStatus(SyncStatus.cloud);
+      return true;
+    } catch (e) {
+      debugPrint('reloadFromCloud failed: $e');
+      _setStatus(SyncStatus.error, 'Reload failed — still showing previous data: $e');
+      return false;
+    }
+  }
+
+  /// Loads this user's last cached rows (offline fallback).
+  /// Returns true if any cached rows for the current user were found.
+  Future<bool> _loadFromCache() async {
+    var found = false;
     try {
       final tRows = await _cache.loadTasks();
       final cRows = await _cache.loadColumns();
@@ -109,6 +168,7 @@ class SupabaseService {
         if (filtered.isNotEmpty) {
           _tasks = filtered.map((j) => Task.fromSupabase(Map<String, dynamic>.from(j))).toList()..sort((a, b) => a.position.compareTo(b.position));
           _tasksCtrl.add(_tasks);
+          found = true;
         }
       }
       if (cRows.isNotEmpty && uid != null) {
@@ -116,6 +176,7 @@ class SupabaseService {
         if (filtered.isNotEmpty) {
           _columns = filtered.map((j) => ColumnDefinition.fromSupabase(Map<String, dynamic>.from(j))).toList()..sort((a, b) => a.position.compareTo(b.position));
           _colsCtrl.add(_columns);
+          found = true;
         }
       }
       if (eRows.isNotEmpty && uid != null) {
@@ -124,11 +185,13 @@ class SupabaseService {
           _entries = filtered.map((j) => DayEntry.fromSupabase(Map<String, dynamic>.from(j))).toList();
           _ensureDefaultStatusForAll();
           _entriesCtrl.add(_entries);
+          found = true;
         }
       }
     } catch (e) {
       debugPrint('cache load err $e');
     }
+    return found;
   }
 
   void _ensureDefaultStatusForAll() {
@@ -182,14 +245,28 @@ class SupabaseService {
     _unsubscribe();
     final uid = userId!;
     _tasksCh = _client!.channel('tasks-$uid')
-      ..onPostgresChanges(event: PostgresChangeEvent.all, schema: 'public', table: 'tasks', filter: PostgresChangeFilter(type: PostgresChangeFilterType.eq, column: 'user_id', value: uid), callback: (_) => _fetchTasks())
+      ..onPostgresChanges(event: PostgresChangeEvent.all, schema: 'public', table: 'tasks', filter: PostgresChangeFilter(type: PostgresChangeFilterType.eq, column: 'user_id', value: uid), callback: (_) => _safeRefresh(_fetchTasks))
       ..subscribe();
     _colsCh = _client!.channel('cols-$uid')
-      ..onPostgresChanges(event: PostgresChangeEvent.all, schema: 'public', table: 'column_definitions', filter: PostgresChangeFilter(type: PostgresChangeFilterType.eq, column: 'user_id', value: uid), callback: (_) => _fetchColumns())
+      ..onPostgresChanges(event: PostgresChangeEvent.all, schema: 'public', table: 'column_definitions', filter: PostgresChangeFilter(type: PostgresChangeFilterType.eq, column: 'user_id', value: uid), callback: (_) => _safeRefresh(_fetchColumns))
       ..subscribe();
     _entriesCh = _client!.channel('entries-$uid')
-      ..onPostgresChanges(event: PostgresChangeEvent.all, schema: 'public', table: 'day_entries', filter: PostgresChangeFilter(type: PostgresChangeFilterType.eq, column: 'user_id', value: uid), callback: (_) => _fetchEntries())
+      ..onPostgresChanges(event: PostgresChangeEvent.all, schema: 'public', table: 'day_entries', filter: PostgresChangeFilter(type: PostgresChangeFilterType.eq, column: 'user_id', value: uid), callback: (_) => _safeRefresh(_fetchEntries))
       ..subscribe();
+  }
+
+  /// Realtime-triggered refresh that never throws and keeps status honest.
+  void _safeRefresh(Future<void> Function() fn) {
+    fn().then((_) {
+      if (isConfigured && syncStatus.value != SyncStatus.loading) {
+        _setStatus(SyncStatus.cloud);
+      }
+    }).catchError((e) {
+      debugPrint('realtime refresh failed: $e');
+      if (isConfigured && syncStatus.value == SyncStatus.cloud) {
+        _setStatus(SyncStatus.offlineCache, 'Lost connection to the cloud — showing last saved data.');
+      }
+    });
   }
 
   void _unsubscribe() {
@@ -276,7 +353,7 @@ class SupabaseService {
       }
       final timeCol = _columns.where((c) => c.id == 'col_time').firstOrNull;
       if (timeCol != null && timeCol.type != ColumnType.timer) {
-        await _client!.from('column_definitions').update({'type': ColumnType.timer.name, 'config': {}}).eq('id', 'col_time');
+        await _client!.from('column_definitions').update({'type': ColumnType.timer.name, 'config': {}}).eq('id', 'col_time').eq('user_id', userId!);
         try {
           final entriesRes = await _client!.from('day_entries').select().eq('user_id', userId!);
           for (final row in (entriesRes as List)) {
@@ -337,27 +414,29 @@ class SupabaseService {
     await _persistCache();
     if (!isConfigured) return;
     try {
-      await _client!.from('tasks').update({'name': t.name, 'position': t.position}).eq('id', t.id);
+      await _client!.from('tasks').update({'name': t.name, 'position': t.position}).eq('id', t.id).eq('user_id', t.userId);
     } catch (e) {
-      await _cache.enqueue(PendingMutation(id: _uuid.v4(), table: 'tasks', op: 'update', payload: {'id': t.id, 'name': t.name, 'position': t.position}, createdAt: DateTime.now()));
+      await _cache.enqueue(PendingMutation(id: _uuid.v4(), table: 'tasks', op: 'update', payload: {'id': t.id, 'name': t.name, 'position': t.position, 'user_id': t.userId}, createdAt: DateTime.now()));
     }
   }
 
   Future<void> deleteTask(String id) async {
+    final uid = userId;
     _tasks = _tasks.where((e) => e.id != id).toList();
     _tasksCtrl.add(_tasks);
     await _persistCache();
     // also delete Google Calendar events for this task (fire-and-forget)
     unawaited(GoogleCalendarService.instance.deleteAllForTask(id));
     if (!isConfigured) {
-      final uid = userId;
       if (uid != null) _demoTasksByUser[uid]?.removeWhere((e) => e.id == id);
       return;
     }
     try {
-      await _client!.from('tasks').delete().eq('id', id);
+      var q = _client!.from('tasks').delete().eq('id', id);
+      if (uid != null) q = q.eq('user_id', uid);
+      await q;
     } catch (e) {
-      await _cache.enqueue(PendingMutation(id: _uuid.v4(), table: 'tasks', op: 'delete', payload: {'id': id}, createdAt: DateTime.now()));
+      await _cache.enqueue(PendingMutation(id: _uuid.v4(), table: 'tasks', op: 'delete', payload: {'id': id, 'user_id': uid}, createdAt: DateTime.now()));
     }
   }
 
@@ -375,7 +454,7 @@ class SupabaseService {
     if (!isConfigured) return;
     for (final t in _tasks) {
       try {
-        await _client!.from('tasks').update({'position': t.position}).eq('id', t.id);
+        await _client!.from('tasks').update({'position': t.position}).eq('id', t.id).eq('user_id', t.userId);
       } catch (_) {}
     }
   }
@@ -405,7 +484,7 @@ class SupabaseService {
       final inserted = _columns.firstWhere((c) => c.id == col.id);
       await _client!.from('column_definitions').insert(inserted.toSupabase(userId!));
       for (final c in _columns.where((c) => c.id != col.id)) {
-        await _client!.from('column_definitions').update({'position': c.position}).eq('id', c.id);
+        await _client!.from('column_definitions').update({'position': c.position}).eq('id', c.id).eq('user_id', userId!);
       }
     } catch (e) {
       await _cache.enqueue(PendingMutation(id: _uuid.v4(), table: 'column_definitions', op: 'insert', payload: col.toSupabase(userId!), createdAt: DateTime.now()));
@@ -472,7 +551,7 @@ class SupabaseService {
           if (!isConfigured) {
           } else {
             try {
-              await _client!.from('day_entries').upsert(_entries[i].toSupabase());
+              await _client!.from('day_entries').upsert(_entries[i].toSupabase(), onConflict: 'user_id,task_id,entry_date');
             } catch (_) {
               await _cache.enqueue(PendingMutation(id: _uuid.v4(), table: 'day_entries', op: 'upsert', payload: _entries[i].toSupabase(), createdAt: DateTime.now()));
             }
@@ -486,7 +565,7 @@ class SupabaseService {
     await _persistCache();
     if (!isConfigured) return;
     try {
-      await _client!.from('column_definitions').update({'label': col.label, 'type': col.type.name, 'position': col.position, 'config': col.config, 'visible_days': col.visibleDays}).eq('id', col.id);
+      await _client!.from('column_definitions').update({'label': col.label, 'type': col.type.name, 'position': col.position, 'config': col.config, 'visible_days': col.visibleDays}).eq('id', col.id).eq('user_id', userId!);
     } catch (e) {
       await _cache.enqueue(PendingMutation(id: _uuid.v4(), table: 'column_definitions', op: 'update', payload: col.toSupabase(userId!), createdAt: DateTime.now()));
     }
@@ -508,18 +587,20 @@ class SupabaseService {
   }
 
   Future<void> deleteColumn(String id) async {
+    final uid = userId;
     _columns = _columns.where((e) => e.id != id).toList();
     _colsCtrl.add(_columns);
     await _persistCache();
     if (!isConfigured) {
-      final uid = userId;
       if (uid != null) _demoColsByUser[uid] = List.from(_columns);
       return;
     }
     try {
-      await _client!.from('column_definitions').delete().eq('id', id);
+      var q = _client!.from('column_definitions').delete().eq('id', id);
+      if (uid != null) q = q.eq('user_id', uid);
+      await q;
     } catch (e) {
-      await _cache.enqueue(PendingMutation(id: _uuid.v4(), table: 'column_definitions', op: 'delete', payload: {'id': id}, createdAt: DateTime.now()));
+      await _cache.enqueue(PendingMutation(id: _uuid.v4(), table: 'column_definitions', op: 'delete', payload: {'id': id, 'user_id': uid}, createdAt: DateTime.now()));
     }
   }
 
@@ -535,9 +616,12 @@ class SupabaseService {
     _colsCtrl.add(_columns);
     await _persistCache();
     if (!isConfigured) return;
+    final uid = userId;
     for (final c in _columns) {
       try {
-        await _client!.from('column_definitions').update({'position': c.position}).eq('id', c.id);
+        var q = _client!.from('column_definitions').update({'position': c.position}).eq('id', c.id);
+        if (uid != null) q = q.eq('user_id', uid);
+        await q;
       } catch (_) {}
     }
   }
@@ -565,7 +649,32 @@ class SupabaseService {
     unawaited(_maybeSyncToGoogle(entry));
     if (!isConfigured) return;
     try {
-      await _client!.from('day_entries').upsert(entry.toSupabase());
+      // Merge with the latest server row so a concurrent edit from another
+      // device (phone vs web) touching a different cell of the same day
+      // is preserved instead of being wiped by a whole-row overwrite.
+      // Local values win per key; checked always reflects this write.
+      var payload = entry.toSupabase();
+      try {
+        final server = await _client!
+            .from('day_entries')
+            .select()
+            .eq('user_id', entry.userId)
+            .eq('task_id', entry.taskId)
+            .eq('entry_date', entry.dateKey)
+            .maybeSingle();
+        if (server != null) {
+          final serverData = (server['data'] is Map) ? Map<String, dynamic>.from(server['data']) : <String, dynamic>{};
+          payload = {
+            ...payload,
+            'id': (server['id'] as String?) ?? entry.id,
+            'checked': entry.checked,
+            'data': {...serverData, ...entry.data},
+          };
+        }
+      } catch (_) {
+        // merge is best-effort; fall back to direct upsert below
+      }
+      await _client!.from('day_entries').upsert(payload, onConflict: 'user_id,task_id,entry_date');
     } catch (e) {
       await _cache.enqueue(PendingMutation(id: _uuid.v4(), table: 'day_entries', op: 'upsert', payload: entry.toSupabase(), createdAt: DateTime.now()));
     }
@@ -702,20 +811,44 @@ class SupabaseService {
     final remaining = <PendingMutation>[];
     for (final m in q) {
       try {
+        // Scope every replayed mutation by user_id when known so a queued
+        // write can never touch another account's rows.
+        final pUid = m.payload['user_id'] as String?;
         switch (m.table) {
           case 'tasks':
-            if (m.op == 'insert') await _client!.from('tasks').insert(m.payload);
-            if (m.op == 'update') await _client!.from('tasks').update(m.payload).eq('id', m.payload['id']);
-            if (m.op == 'delete') await _client!.from('tasks').delete().eq('id', m.payload['id']);
+            if (m.op == 'insert') {
+              await _client!.from('tasks').insert(m.payload);
+            } else if (m.op == 'update') {
+              var uq = _client!.from('tasks').update(m.payload).eq('id', m.payload['id']);
+              if (pUid != null) uq = uq.eq('user_id', pUid);
+              await uq;
+            } else if (m.op == 'delete') {
+              var dq = _client!.from('tasks').delete().eq('id', m.payload['id']);
+              if (pUid != null) dq = dq.eq('user_id', pUid);
+              await dq;
+            }
             break;
           case 'column_definitions':
-            if (m.op == 'insert') await _client!.from('column_definitions').insert(m.payload);
-            if (m.op == 'update') await _client!.from('column_definitions').update(m.payload).eq('id', m.payload['id']);
-            if (m.op == 'delete') await _client!.from('column_definitions').delete().eq('id', m.payload['id']);
+            if (m.op == 'insert') {
+              await _client!.from('column_definitions').upsert(m.payload, onConflict: 'user_id,id');
+            } else if (m.op == 'update') {
+              var uq = _client!.from('column_definitions').update(m.payload).eq('id', m.payload['id']);
+              if (pUid != null) uq = uq.eq('user_id', pUid);
+              await uq;
+            } else if (m.op == 'delete') {
+              var dq = _client!.from('column_definitions').delete().eq('id', m.payload['id']);
+              if (pUid != null) dq = dq.eq('user_id', pUid);
+              await dq;
+            }
             break;
           case 'day_entries':
-            if (m.op == 'upsert' || m.op == 'insert') await _client!.from('day_entries').upsert(m.payload);
-            if (m.op == 'update') await _client!.from('day_entries').update(m.payload).eq('id', m.payload['id']);
+            if (m.op == 'upsert' || m.op == 'insert') {
+              await _client!.from('day_entries').upsert(m.payload, onConflict: 'user_id,task_id,entry_date');
+            } else if (m.op == 'update') {
+              var uq = _client!.from('day_entries').update(m.payload).eq('id', m.payload['id']);
+              if (pUid != null) uq = uq.eq('user_id', pUid);
+              await uq;
+            }
             break;
           case 'app_users':
             if (m.op == 'insert') await _client!.from('app_users').insert(m.payload);
@@ -727,6 +860,7 @@ class SupabaseService {
     }
     await _cache.saveQueue(remaining);
     await _fetchAll();
+    if (remaining.isEmpty && isConfigured) _setStatus(SyncStatus.cloud);
   }
 
   // Demo seed per identity
@@ -779,6 +913,7 @@ class SupabaseService {
 
   void dispose() {
     _statusTicker?.cancel();
+    syncStatus.dispose();
     _tasksCtrl.close();
     _colsCtrl.close();
     _entriesCtrl.close();
