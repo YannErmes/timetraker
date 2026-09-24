@@ -649,22 +649,6 @@ class SupabaseService {
       return null;
     }
   }
-
-  /// Id of the immediate next task to do for [date]: the first task in
-  /// position order with a checked (scheduled) entry whose status is
-  /// neither done nor cancelled. Null when the day is fully done.
-  String? nextUpTaskId(DateTime date) {
-    final sorted = List<Task>.from(_tasks)..sort((a, b) => a.position.compareTo(b.position));
-    final statusCol = _columns.where((c) => c.type == ColumnType.status).firstOrNull;
-    for (final t in sorted) {
-      final e = entryFor(t.id, date);
-      if (e == null || !e.checked) continue;
-      final s = statusCol == null ? null : e.data[statusCol.id] as String?;
-      if (s == 'done' || s == 'cancel' || s == 'cancelled') continue;
-      return t.id;
-    }
-    return null;
-  }
   Future<void> upsertEntry(DayEntry entry) async {
     final idx = _entries.indexWhere((e) => e.id == entry.id);
     if (idx >= 0) {

@@ -17,7 +17,6 @@ import 'cells/cell_widgets.dart';
 import 'cells/compact_cell.dart';
 import 'cells/timer_cell.dart';
 import 'note_editor_panel.dart';
-import 'up_next_dot.dart';
 
 class WeeklyGrid extends ConsumerStatefulWidget {
   const WeeklyGrid({super.key});
@@ -546,7 +545,6 @@ class _LeftTaskCellState extends ConsumerState<_LeftTaskCell> {
     if (noteCol != null) {
       noteCount = svc.entries.where((e) => e.taskId == task.id && notePlainText(e.data[noteCol.id]).isNotEmpty).length;
     }
-    final isNext = svc.nextUpTaskId(ref.watch(selectedDateProvider)) == task.id;
     return MouseRegion(
       onEnter: (_) => widget.onHover(true),
       onExit: (_) => widget.onHover(false),
@@ -568,10 +566,6 @@ class _LeftTaskCellState extends ConsumerState<_LeftTaskCell> {
           ReorderableDragStartListener(index: widget.index, child: Icon(Icons.drag_handle, size: 14, color: AppColors.textSecondary)),
           const SizedBox(width: 6),
           Expanded(child: InkWell(onTap: widget.onRename, borderRadius: BorderRadius.circular(8), child: Padding(padding: const EdgeInsets.symmetric(vertical: 4), child: Text(task.name.isEmpty ? '—' : task.name, style: TextStyle(fontSize: 12, color: task.name.isEmpty ? AppColors.textSecondary : AppColors.textPrimary, fontWeight: FontWeight.w500), overflow: TextOverflow.ellipsis)))),
-          if (isNext) ...[
-            const UpNextDot(size: 9),
-            const SizedBox(width: 4),
-          ],
           PopupMenuButton(
             color: AppColors.surface,
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8), side: BorderSide(color: AppColors.border)),

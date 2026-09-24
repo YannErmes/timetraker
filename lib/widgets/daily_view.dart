@@ -15,7 +15,6 @@ import 'cells/cell_widgets.dart';
 import 'cells/compact_cell.dart';
 import 'cells/timer_cell.dart';
 import 'note_editor_panel.dart';
-import 'up_next_dot.dart';
 
 class DailyView extends ConsumerStatefulWidget {
   const DailyView({super.key});
@@ -274,10 +273,6 @@ class _SquareTaskCard extends ConsumerWidget {
             Checkbox(value: checked, onChanged: (v) => svc.toggleChecked(task.id, date, v ?? false), visualDensity: VisualDensity.compact, materialTapTargetSize: MaterialTapTargetSize.shrinkWrap),
             const SizedBox(width: 4),
             Expanded(child: Text(task.name.isEmpty ? loc.untitledCap : task.name, style: TextStyle(fontWeight: FontWeight.w700, color: AppColors.textPrimary, fontSize: 13), overflow: TextOverflow.ellipsis)),
-            if (svc.nextUpTaskId(date) == task.id) ...[
-              const UpNextDot(),
-              const SizedBox(width: 6),
-            ],
             PopupMenuButton(
               color: AppColors.surface,
               icon: Icon(Icons.more_horiz, size: 16, color: AppColors.textSecondary),
