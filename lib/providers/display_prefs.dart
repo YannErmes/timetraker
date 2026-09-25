@@ -8,15 +8,16 @@ class DisplayPrefs {
   final int daysVisible; // 0 = all (7)
   final bool basicCells; // true = compact icon-only timer/status cells
   final bool lightMode; // true = light theme, false = dark theme
-  const DisplayPrefs({this.rowsVisible = 0, this.daysVisible = 0, this.basicCells = false, this.lightMode = false});
+  // First-install defaults: light theme + Basic layout.
+  const DisplayPrefs({this.rowsVisible = 0, this.daysVisible = 0, this.basicCells = true, this.lightMode = true});
   DisplayPrefs copyWith({int? rowsVisible, int? daysVisible, bool? basicCells, bool? lightMode}) =>
       DisplayPrefs(rowsVisible: rowsVisible ?? this.rowsVisible, daysVisible: daysVisible ?? this.daysVisible, basicCells: basicCells ?? this.basicCells, lightMode: lightMode ?? this.lightMode);
   Map<String, dynamic> toJson() => {'rowsVisible': rowsVisible, 'daysVisible': daysVisible, 'basicCells': basicCells, 'lightMode': lightMode};
   factory DisplayPrefs.fromJson(Map<String, dynamic> j) => DisplayPrefs(
         rowsVisible: (j['rowsVisible'] as num?)?.toInt() ?? 0,
         daysVisible: (j['daysVisible'] as num?)?.toInt() ?? 0,
-        basicCells: (j['basicCells'] as bool?) ?? false,
-        lightMode: (j['lightMode'] as bool?) ?? false,
+        basicCells: (j['basicCells'] as bool?) ?? true,
+        lightMode: (j['lightMode'] as bool?) ?? true,
       );
 }
 

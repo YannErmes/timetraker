@@ -302,7 +302,16 @@ class AppLocalizationsFr extends AppLocalizations {
   String get noScheduled => 'Aucune tâche planifiée ce jour.';
 
   @override
-  String get goWeeklyHint => 'Allez en vue Hebdomadaire et cochez les tâches voulues pour cette date.';
+  String get goWeeklyHint => 'Allez en vue Hebdomadaire et donnez un statut à la tâche pour cette date.';
+
+  @override
+  String get checkHint => 'Définissez un statut autre qu\'inactif en vue Hebdomadaire ou Quotidienne pour planifier à cette date.';
+
+  @override
+  String get checkScheduledHint => 'Définissez un statut autre qu\'inactif en vue Hebdomadaire ou Quotidienne pour planifier à cette date.';
+
+  @override
+  String get statusTip => 'Définir le statut';
 
   @override
   String scheduledLine(String a, String b, String day) {
@@ -731,6 +740,18 @@ class AppLocalizationsFr extends AppLocalizations {
   String get analyticsSubtitle => 'Vos progrès en un coup d\'œil';
 
   @override
+  String get timelineTitle => 'Période';
+
+  @override
+  String get fromLbl => 'Du';
+
+  @override
+  String get toLbl => 'Au';
+
+  @override
+  String get allTimeBtn => 'Toute période';
+
+  @override
   String get scheduledChip => 'Planifiées';
 
   @override
@@ -839,7 +860,7 @@ class AppLocalizationsFr extends AppLocalizations {
   }
 
   @override
-  String get androidNote => 'Vue Android simplifiée — cases et statuts uniquement. Modifications structurelles sur le Web. Synchro temps réel via Supabase. File d\'attente hors ligne activée.';
+  String get androidNote => 'Vue Android simplifiée — statuts uniquement. Modifications structurelles sur le Web. Synchro temps réel via Supabase. File d\'attente hors ligne activée.';
 
   @override
   String get editsHint => 'Les modifications s\'enregistrent aussitôt et mettent à jour la carte mensuelle.';
@@ -848,15 +869,9 @@ class AppLocalizationsFr extends AppLocalizations {
   String get noScheduledTitle => 'Aucune tâche planifiée ce jour.';
 
   @override
-  String get checkHint => 'Cochez la case d\'une tâche en vue Hebdomadaire ou Quotidienne pour la planifier à cette date.';
-
-  @override
   String noneScheduledLine(String day, String total) {
     return '$day — $total tâches au total, aucune planifiée.';
   }
-
-  @override
-  String get checkScheduledHint => 'Cochez la case d\'une tâche en vue Hebdomadaire ou Quotidienne pour la planifier à cette date.';
 
   @override
   String get timerTitle => 'Minuteur';

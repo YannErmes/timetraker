@@ -7,6 +7,7 @@ import '../providers/column_visibility.dart';
 import '../providers/task_filters.dart';
 import '../models/enums.dart';
 import 'cells/cell_widgets.dart';
+import 'cells/compact_cell.dart';
 import 'cells/reminder_cell.dart';
 import 'cells/timer_cell.dart';
 
@@ -46,11 +47,13 @@ class AndroidChecklist extends ConsumerWidget {
       return true;
     }).toList();
     final date = ref.watch(selectedDateProvider);
-    // Day order: scheduled (checked) tasks first, the rest after.
+    // Day order: assigned (non-idle status) tasks first, the rest after.
     tasks.sort((a, b) {
-      final ea = svc.entryFor(a.id, date)?.checked ?? false;
-      final eb = svc.entryFor(b.id, date)?.checked ?? false;
-      if (ea != eb) return ea ? -1 : 1;
+      final ea = svc.entryFor(a.id, date);
+      final eb = svc.entryFor(b.id, date);
+      final aa = ea != null && svc.isAssigned(ea);
+      final bb = eb != null && svc.isAssigned(eb);
+      if (aa != bb) return aa ? -1 : 1;
       return a.position.compareTo(b.position);
     });
     final isSmall = MediaQuery.of(context).size.width < 380;
@@ -112,10 +115,15 @@ class AndroidChecklist extends ConsumerWidget {
                 child: Column(children: [
                   Row(children: [
                     Builder(builder: (_) {
+                      final statusCol = allCols.where((c) => c.type == ColumnType.status).firstOrNull;
                       final e = svc.entryFor(t.id, date);
-                      final checked = e?.checked ?? false;
-                      return Checkbox(value: checked, onChanged: (v) => svc.toggleChecked(t.id, date, v ?? false));
+                      if (statusCol == null) {
+                        final checked = e?.checked ?? false;
+                        return Checkbox(value: checked, onChanged: (v) => svc.toggleChecked(t.id, date, v ?? false));
+                      }
+                      return StatusDotButton(taskId: t.id, date: date, col: statusCol, rawValue: e?.data[statusCol.id], title: loc.editColLabel(statusCol.label));
                     }),
+                    const SizedBox(width: 6),
                     Expanded(child: Text(t.name.isEmpty ? loc.untitledCap : t.name, style: TextStyle(fontWeight: FontWeight.w600, color: AppColors.textPrimary))),
                   ]),
                   Divider(color: AppColors.border, height: 16),

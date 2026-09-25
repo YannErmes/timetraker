@@ -45,7 +45,7 @@ class _NotificationSettingsSectionState extends ConsumerState<NotificationSettin
       final svc = ref.read(supabaseServiceProvider);
       final date = ref.read(selectedDateProvider);
       final tasks = svc.tasks;
-      final scheduled = svc.entries.where((e) => e.checked && e.date.year == date.year && e.date.month == date.month && e.date.day == date.day).toList();
+      final scheduled = svc.entries.where((e) => svc.isAssigned(e) && e.date.year == date.year && e.date.month == date.month && e.date.day == date.day).toList();
       if (scheduled.isEmpty) return t.noTasksToday;
       final names = scheduled.take(4).map((e) {
         final task = tasks.where((tt) => tt.id == e.taskId).firstOrNull;

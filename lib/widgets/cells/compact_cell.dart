@@ -63,34 +63,29 @@ class CompactTimerIcon extends ConsumerWidget {
     final tv = TimerValue.tryParse(rawValue);
     final has = tv != null && tv.durationSec > 0;
     final tooltip = has ? TimerValue.formatSec(tv.durationSec) : loc.setDurationBtn;
-    return InkWell(
-      borderRadius: BorderRadius.circular(8),
-      onTap: () => showCellEditorDialog(
-        context,
-        title: title,
-        editor: TimerCell(taskId: taskId, date: date, columnId: columnId, rawValue: rawValue),
-      ),
-      child: Container(
-        height: 32,
-        decoration: BoxDecoration(
-          color: AppColors.inputFill,
-          borderRadius: BorderRadius.circular(8),
-          border: Border.all(color: has ? AppColors.accent.withValues(alpha: 0.6) : AppColors.inputBorder),
+    return Tooltip(
+      message: tooltip,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(8),
+        onTap: () => showCellEditorDialog(
+          context,
+          title: title,
+          editor: TimerCell(taskId: taskId, date: date, columnId: columnId, rawValue: rawValue),
         ),
-        child: Center(
-          child: Row(mainAxisSize: MainAxisSize.min, children: [
-            Icon(
+        child: Container(
+          height: 32,
+          decoration: BoxDecoration(
+            color: AppColors.inputFill,
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(color: has ? AppColors.accent.withValues(alpha: 0.6) : AppColors.inputBorder),
+          ),
+          child: Center(
+            child: Icon(
               has ? (tv.running ? Icons.hourglass_bottom_rounded : Icons.hourglass_empty_rounded) : Icons.hourglass_empty_rounded,
-              size: 15,
+              size: 16,
               color: has ? AppColors.accent : AppColors.textSecondary,
             ),
-            if (has) ...[
-              const SizedBox(width: 4),
-              Flexible(
-                child: Text(tooltip, style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: AppColors.textPrimary), overflow: TextOverflow.ellipsis, maxLines: 1),
-              ),
-            ],
-          ]),
+          ),
         ),
       ),
     );
@@ -110,13 +105,57 @@ class CompactStatusIcon extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final valueId = rawValue as String?;
     final dot = statusDotColor(valueId, col.statusOptions);
+    final fallbackId = col.statusOptions.any((o) => o.id == 'idle') ? 'idle' : 'none';
     final label = (() {
       try {
-        return col.statusOptions.firstWhere((o) => o.id == (valueId ?? 'none')).label;
+        return col.statusOptions.firstWhere((o) => o.id == (valueId ?? fallbackId)).label;
       } catch (_) {
-        return valueId ?? 'none';
+        return valueId ?? fallbackId;
       }
     })();
+    return Tooltip(
+      message: label,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(8),
+        onTap: () => showCellEditorDialog(
+          context,
+          title: title,
+          editor: StatusCell(
+            valueId: valueId,
+            options: col.statusOptions,
+            onChanged: (v) => ref.read(supabaseServiceProvider).setCellValue(taskId, date, col.id, v),
+          ),
+        ),
+        child: Container(
+          height: 32,
+          decoration: BoxDecoration(
+            color: AppColors.inputFill,
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(color: AppColors.inputBorder),
+          ),
+          child: Center(child: Icon(Icons.circle, size: 14, color: dot)),
+        ),
+      ),
+    );
+  }
+}
+
+/// 32px status dot button (replaces the scheduling checkbox).
+/// Tap opens the full status editor; idle means unassigned for the day.
+class StatusDotButton extends ConsumerWidget {
+  final String taskId;
+  final DateTime date;
+  final ColumnDefinition col;
+  final dynamic rawValue;
+  final String title;
+  const StatusDotButton({super.key, required this.taskId, required this.date, required this.col, required this.rawValue, required this.title});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final t = AppLocalizations.of(context)!;
+    final valueId = rawValue as String?;
+    final dot = statusDotColor(valueId, col.statusOptions);
+    final assigned = valueId != null && valueId != 'idle';
     return InkWell(
       borderRadius: BorderRadius.circular(8),
       onTap: () => showCellEditorDialog(
@@ -128,21 +167,18 @@ class CompactStatusIcon extends ConsumerWidget {
           onChanged: (v) => ref.read(supabaseServiceProvider).setCellValue(taskId, date, col.id, v),
         ),
       ),
-      child: Container(
-        height: 32,
-        decoration: BoxDecoration(
-          color: AppColors.inputFill,
-          borderRadius: BorderRadius.circular(8),
-          border: Border.all(color: AppColors.inputBorder),
-        ),
-        child: Center(
-          child: Row(mainAxisSize: MainAxisSize.min, children: [
-            Icon(Icons.circle, size: 13, color: dot),
-            const SizedBox(width: 6),
-            Flexible(
-              child: Text(label, style: TextStyle(fontSize: 11, color: AppColors.textSecondary), overflow: TextOverflow.ellipsis),
-            ),
-          ]),
+      child: Tooltip(
+        message: t.statusTip,
+        child: Container(
+          width: 32,
+          height: 32,
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            color: assigned ? dot.withValues(alpha: 0.16) : AppColors.inputFill,
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(color: assigned ? dot : AppColors.inputBorder, width: assigned ? 1.5 : 1),
+          ),
+          child: Icon(Icons.circle, size: 12, color: dot),
         ),
       ),
     );

@@ -632,8 +632,26 @@ abstract class AppLocalizations {
   /// No description provided for @goWeeklyHint.
   ///
   /// In en, this message translates to:
-  /// **'Go to Weekly view and check the box for tasks you want on this date.'**
+  /// **'Go to Weekly view and give the task a status for this date.'**
   String get goWeeklyHint;
+
+  /// No description provided for @checkHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Set any status other than idle in Weekly or Daily view to schedule it for this date.'**
+  String get checkHint;
+
+  /// No description provided for @checkScheduledHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Set any status other than idle in Weekly or Daily view to schedule it for this date.'**
+  String get checkScheduledHint;
+
+  /// No description provided for @statusTip.
+  ///
+  /// In en, this message translates to:
+  /// **'Set status'**
+  String get statusTip;
 
   /// No description provided for @scheduledLine.
   ///
@@ -1427,6 +1445,30 @@ abstract class AppLocalizations {
   /// **'Your progress at a glance'**
   String get analyticsSubtitle;
 
+  /// No description provided for @timelineTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Timeline'**
+  String get timelineTitle;
+
+  /// No description provided for @fromLbl.
+  ///
+  /// In en, this message translates to:
+  /// **'From'**
+  String get fromLbl;
+
+  /// No description provided for @toLbl.
+  ///
+  /// In en, this message translates to:
+  /// **'To'**
+  String get toLbl;
+
+  /// No description provided for @allTimeBtn.
+  ///
+  /// In en, this message translates to:
+  /// **'All time'**
+  String get allTimeBtn;
+
   /// No description provided for @scheduledChip.
   ///
   /// In en, this message translates to:
@@ -1610,7 +1652,7 @@ abstract class AppLocalizations {
   /// No description provided for @androidNote.
   ///
   /// In en, this message translates to:
-  /// **'Android simplified view — checkbox + status editing only. Structural edits (add/reorder columns) on Web. Synced via Supabase realtime. Offline queue enabled.'**
+  /// **'Android simplified view — status editing only. Structural edits (add/reorder columns) on Web. Synced via Supabase realtime. Offline queue enabled.'**
   String get androidNote;
 
   /// No description provided for @editsHint.
@@ -1625,23 +1667,11 @@ abstract class AppLocalizations {
   /// **'No tasks scheduled for this day.'**
   String get noScheduledTitle;
 
-  /// No description provided for @checkHint.
-  ///
-  /// In en, this message translates to:
-  /// **'Check the box for a task in Weekly or Daily view to schedule it for this date.'**
-  String get checkHint;
-
   /// No description provided for @noneScheduledLine.
   ///
   /// In en, this message translates to:
   /// **'{day} — {total} total tasks, none scheduled.'**
   String noneScheduledLine(String day, String total);
-
-  /// No description provided for @checkScheduledHint.
-  ///
-  /// In en, this message translates to:
-  /// **'Check the box for a task in Weekly or Daily view to schedule it for this date.'**
-  String get checkScheduledHint;
 
   /// No description provided for @timerTitle.
   ///

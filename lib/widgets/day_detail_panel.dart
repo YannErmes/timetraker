@@ -8,6 +8,7 @@ import '../providers/column_visibility.dart';
 import '../models/enums.dart';
 import '../utils/date_utils.dart';
 import 'cells/cell_widgets.dart';
+import 'cells/compact_cell.dart';
 import 'cells/reminder_cell.dart';
 import 'cells/timer_cell.dart';
 import 'note_editor_panel.dart';
@@ -24,8 +25,11 @@ class DayDetailPanel extends ConsumerWidget {
     ref.watch(entriesProvider);
     final loc = AppLocalizations.of(context)!;
     final allTasks = List.of(svc.tasks)..sort((a, b) => a.position.compareTo(b.position));
-    // Monthly filtering: only tasks whose checkbox is checked for this day are scheduled
-    final tasks = allTasks.where((t) => (svc.entryFor(t.id, date)?.checked ?? false)).toList();
+    // Monthly filtering: only tasks assigned (non-idle status) for this day
+    final tasks = allTasks.where((t) {
+      final e = svc.entryFor(t.id, date);
+      return e != null && svc.isAssigned(e);
+    }).toList();
     final allCols = List.of(svc.columns)..sort((a, b) => a.position.compareTo(b.position));
     final hidden = ref.watch(columnVisibilityProvider);
     final cols = allCols.where((c) => !hidden.contains(c.id)).toList();
@@ -70,13 +74,17 @@ class DayDetailPanel extends ConsumerWidget {
                   itemBuilder: (_, i) {
                     final t = tasks[i];
                     final e = svc.entryFor(t.id, date);
-                    final checked = e?.checked ?? false;
+                    final statusCol = allCols.where((c) => c.type == ColumnType.status).firstOrNull;
                     return Container(
                       decoration: BoxDecoration(color: AppColors.inputFill, borderRadius: BorderRadius.circular(8), border: Border.all(color: AppColors.border)),
                       padding: const EdgeInsets.all(10),
                       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                         Row(children: [
-                          Checkbox(value: checked, onChanged: (v) => svc.toggleChecked(t.id, date, v ?? false)),
+                          if (statusCol != null)
+                            StatusDotButton(taskId: t.id, date: date, col: statusCol, rawValue: e?.data[statusCol.id], title: loc.editColLabel(statusCol.label))
+                          else
+                            Checkbox(value: e?.checked ?? false, onChanged: (v) => svc.toggleChecked(t.id, date, v ?? false)),
+                          const SizedBox(width: 6),
                           Expanded(child: Text(t.name.isEmpty ? loc.untitledCap : t.name, style: TextStyle(color: AppColors.textPrimary, fontWeight: FontWeight.w600, fontSize: 13))),
                         ]),
                         const SizedBox(height: 8),

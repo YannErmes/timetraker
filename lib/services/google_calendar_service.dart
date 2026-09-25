@@ -137,12 +137,12 @@ class GoogleCalendarService {
   }
 
   /// Sync single day entry — called automatically after every toggleChecked/setCellValue if autoSync
-  Future<void> syncDay(Task task, DayEntry? entry) async {
+  Future<void> syncDay(Task task, DayEntry? entry, {bool assigned = true}) async {
     if (!await isAutoSyncEnabled()) return;
     if (!await isConnected()) return;
     final cal = await _getCalendarApi();
     if (cal == null) return;
-    if (entry == null || !entry.checked) {
+    if (entry == null || !assigned) {
       // unscheduled -> delete existing event if any
       final key = _eventKey(task.id, entry?.date ?? DateTime.now());
       final map = await _loadEventMap();
@@ -221,16 +221,16 @@ class GoogleCalendarService {
   }
 
   /// Sync whole month (monthly view) — iterates scheduled entries for that month
-  Future<int> syncMonth(DateTime month, List<Task> tasks, List<DayEntry> entries) async {
+  Future<int> syncMonth(DateTime month, List<Task> tasks, List<DayEntry> entries, {required bool Function(DayEntry) isAssigned}) async {
     if (!await isConnected()) throw Exception('Not connected to Google');
     final cal = await _getCalendarApi();
     if (cal == null) throw Exception('No Google client');
-    final monthEntries = entries.where((e) => e.checked && e.date.year == month.year && e.date.month == month.month).toList();
+    final monthEntries = entries.where((e) => isAssigned(e) && e.date.year == month.year && e.date.month == month.month).toList();
     int synced = 0;
     for (final e in monthEntries) {
       final task = tasks.where((t) => t.id == e.taskId).firstOrNull;
       if (task == null) continue;
-      await syncDay(task, e);
+      await syncDay(task, e, assigned: true);
       synced++;
     }
     // also clean up unscheduled: those that were previously synced but now unchecked will be handled on next syncDay delete

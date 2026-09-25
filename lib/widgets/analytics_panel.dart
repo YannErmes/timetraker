@@ -11,11 +11,91 @@ import '../utils/date_utils.dart';
 
 /// Analytics dashboard page: overview cards, 8-week progress chart,
 /// status donut, time per task, and per-task completion bars.
-class AnalyticsPage extends ConsumerWidget {
+class AnalyticsPage extends ConsumerStatefulWidget {
   const AnalyticsPage({super.key});
+  @override
+  ConsumerState<AnalyticsPage> createState() => _AnalyticsPageState();
+}
+
+class _AnalyticsPageState extends ConsumerState<AnalyticsPage> {
+  DateTime? _from;
+  DateTime? _to;
+
+  DateTime _norm(DateTime d) => DateTime(d.year, d.month, d.day);
+  String _fmt(DateTime? d) => d == null ? '—' : '${d.month}/${d.day}/${d.year}';
+
+  Future<void> _pick(bool isFrom) async {
+    final now = DateTime.now();
+    final d = await showDatePicker(
+      context: context,
+      initialDate: (isFrom ? _from : _to) ?? now,
+      firstDate: DateTime(2020),
+      lastDate: DateTime(2035),
+    );
+    if (d == null) return;
+    setState(() {
+      if (isFrom) {
+        _from = d;
+        if (_to != null && _norm(d).isAfter(_norm(_to!))) _to = d;
+      } else {
+        _to = d;
+        if (_from != null && _norm(_from!).isAfter(_norm(d))) _from = d;
+      }
+    });
+  }
+
+  void _preset(int days) {
+    final now = _norm(DateTime.now());
+    setState(() {
+      _to = now;
+      _from = now.subtract(Duration(days: days - 1));
+    });
+  }
+
+  Widget _dateBox(String label, DateTime? value, VoidCallback onTap) {
+    return InkWell(
+      borderRadius: BorderRadius.circular(10),
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+        decoration: BoxDecoration(color: AppColors.surface, borderRadius: BorderRadius.circular(10), border: Border.all(color: AppColors.border)),
+        child: Row(children: [
+          Icon(Icons.calendar_today_rounded, size: 13, color: AppColors.textSecondary),
+          const SizedBox(width: 6),
+          Expanded(
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text(label, style: TextStyle(fontSize: 9, color: AppColors.textSecondary, fontWeight: FontWeight.w600)),
+              Text(_fmt(value), style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: AppColors.textPrimary)),
+            ]),
+          ),
+        ]),
+      ),
+    );
+  }
+
+  Widget _presetChip(String label, VoidCallback onTap) {
+    final active = label == '7D'
+        ? _from != null && _to != null && _norm(_to!).difference(_norm(_from!)).inDays == 6
+        : label == '30D'
+            ? _from != null && _to != null && _norm(_to!).difference(_norm(_from!)).inDays == 29
+            : _from == null && _to == null;
+    return InkWell(
+      borderRadius: BorderRadius.circular(16),
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+        decoration: BoxDecoration(
+          color: active ? AppColors.accent : AppColors.surface,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: active ? AppColors.accent : AppColors.border),
+        ),
+        child: Text(label, style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: active ? Colors.white : AppColors.textSecondary)),
+      ),
+    );
+  }
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  Widget build(BuildContext context) {
     final svc = ref.watch(supabaseServiceProvider);
     final t = AppLocalizations.of(context)!;
     final tasks = List.of(svc.tasks)..sort((a, b) => a.position.compareTo(b.position));
@@ -24,14 +104,22 @@ class AnalyticsPage extends ConsumerWidget {
     final statusCol = cols.where((c) => c.type.name == 'status').firstOrNull;
     final timerCol = cols.where((c) => c.type.name == 'timer').firstOrNull;
 
-    String? statusOf(e) => statusCol == null ? null : e.data[statusCol.id] as String?;
+    String? statusOf(dynamic e) =>
+        (statusCol == null || e == null) ? null : (e.data[statusCol.id] as String?);
     int timerSecOf(e) {
       if (timerCol == null) return 0;
       final tv = TimerValue.tryParse(e.data[timerCol.id]);
       return tv?.durationSec ?? 0;
     }
 
-    final scheduled = entries.where((e) => e.checked).toList();
+    final scheduledAll = entries.where((e) => svc.isAssigned(e)).toList();
+    // Timeline filter (date 1 → date 2); empty ends mean open range.
+    final scheduled = scheduledAll.where((e) {
+      final d = _norm(e.date as DateTime);
+      if (_from != null && d.isBefore(_norm(_from!))) return false;
+      if (_to != null && d.isAfter(_norm(_to!))) return false;
+      return true;
+    }).toList();
     final doneCount = scheduled.where((e) => statusOf(e) == 'done').length;
     final totalSec = scheduled.fold(0, (s, e) => s + timerSecOf(e));
     final doneSec = scheduled.where((e) => statusOf(e) == 'done').fold(0, (s, e) => s + timerSecOf(e));
@@ -58,6 +146,27 @@ class AnalyticsPage extends ConsumerWidget {
               ]),
               const SizedBox(height: 12),
             _Card(
+              title: t.timelineTitle,
+              child: Column(children: [
+                Row(children: [
+                  Expanded(child: _dateBox(t.fromLbl, _from, () => _pick(true))),
+                  const SizedBox(width: 8),
+                  Expanded(child: _dateBox(t.toLbl, _to, () => _pick(false))),
+                ]),
+                const SizedBox(height: 8),
+                Row(children: [
+                  _presetChip('7D', () => _preset(7)),
+                  const SizedBox(width: 6),
+                  _presetChip('30D', () => _preset(30)),
+                  const SizedBox(width: 6),
+                  _presetChip(t.allTimeBtn, () => setState(() {
+                        _from = null;
+                        _to = null;
+                      })),
+                ]),
+              ]),
+            ),
+            _Card(
               title: t.scheduledChip,
               child: Wrap(spacing: 8, runSpacing: 8, children: [
                 _Stat(Icons.list_alt_rounded, t.scheduledChip, t.slotsDays('${scheduled.length}', '$distinctDays'), AppColors.textPrimary),
@@ -68,7 +177,7 @@ class AnalyticsPage extends ConsumerWidget {
             ),
             _Card(
               title: t.weeklyProgress,
-              child: _WeeklyChart(scheduled: scheduled, statusOf: statusOf, t: t),
+              child:             _WeeklyChart(scheduled: scheduled, statusOf: statusOf, t: t, from: _from, to: _to),
             ),
             _Card(
               title: t.statusBreakdown,
@@ -229,14 +338,35 @@ class _WeeklyChart extends StatelessWidget {
   final List<dynamic> scheduled;
   final String? Function(dynamic) statusOf;
   final AppLocalizations t;
-  const _WeeklyChart({required this.scheduled, required this.statusOf, required this.t});
+  final DateTime? from;
+  final DateTime? to;
+  const _WeeklyChart({required this.scheduled, required this.statusOf, required this.t, this.from, this.to});
+
+  DateTime _monday(DateTime d) {
+    final n = DateTime(d.year, d.month, d.day);
+    return n.subtract(Duration(days: n.weekday - 1));
+  }
 
   @override
   Widget build(BuildContext context) {
     final now = normalizeDate(DateTime.now());
-    final monday = now.subtract(Duration(days: now.weekday - 1));
-    final List<({DateTime start, int total, int done})> weeks = List.generate(8, (i) {
-      final start = monday.subtract(Duration(days: 7 * (7 - i)));
+    // Buckets follow the selected timeline; default = last 8 weeks.
+    final endMon = _monday(to ?? now);
+    DateTime startMon;
+    if (from != null) {
+      startMon = _monday(from!);
+    } else if (to != null) {
+      startMon = endMon.subtract(const Duration(days: 7 * 7));
+    } else {
+      startMon = endMon.subtract(const Duration(days: 7 * 7));
+    }
+    final starts = <DateTime>[];
+    var cur = startMon;
+    while (!cur.isAfter(endMon) && starts.length < 26) {
+      starts.add(cur);
+      cur = cur.add(const Duration(days: 7));
+    }
+    final weeks = starts.map((start) {
       final end = start.add(const Duration(days: 6));
       final inWeek = scheduled.where((e) {
         final d = normalizeDate(e.date as DateTime);
@@ -244,7 +374,7 @@ class _WeeklyChart extends StatelessWidget {
       }).toList();
       final done = inWeek.where((e) => statusOf(e) == 'done').length;
       return (start: start, total: inWeek.length, done: done);
-    });
+    }).toList();
     final maxTotal = weeks.fold(1, (m, w) => w.total > m ? w.total : m);
     return SingleChildScrollView(
       scrollDirection: Axis.horizontal,

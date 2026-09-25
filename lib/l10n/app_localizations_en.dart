@@ -302,7 +302,16 @@ class AppLocalizationsEn extends AppLocalizations {
   String get noScheduled => 'No tasks scheduled for this day.';
 
   @override
-  String get goWeeklyHint => 'Go to Weekly view and check the box for tasks you want on this date.';
+  String get goWeeklyHint => 'Go to Weekly view and give the task a status for this date.';
+
+  @override
+  String get checkHint => 'Set any status other than idle in Weekly or Daily view to schedule it for this date.';
+
+  @override
+  String get checkScheduledHint => 'Set any status other than idle in Weekly or Daily view to schedule it for this date.';
+
+  @override
+  String get statusTip => 'Set status';
 
   @override
   String scheduledLine(String a, String b, String day) {
@@ -731,6 +740,18 @@ class AppLocalizationsEn extends AppLocalizations {
   String get analyticsSubtitle => 'Your progress at a glance';
 
   @override
+  String get timelineTitle => 'Timeline';
+
+  @override
+  String get fromLbl => 'From';
+
+  @override
+  String get toLbl => 'To';
+
+  @override
+  String get allTimeBtn => 'All time';
+
+  @override
   String get scheduledChip => 'Scheduled';
 
   @override
@@ -839,7 +860,7 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
-  String get androidNote => 'Android simplified view — checkbox + status editing only. Structural edits (add/reorder columns) on Web. Synced via Supabase realtime. Offline queue enabled.';
+  String get androidNote => 'Android simplified view — status editing only. Structural edits (add/reorder columns) on Web. Synced via Supabase realtime. Offline queue enabled.';
 
   @override
   String get editsHint => 'Edits save immediately and update the Monthly heatmap.';
@@ -848,15 +869,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get noScheduledTitle => 'No tasks scheduled for this day.';
 
   @override
-  String get checkHint => 'Check the box for a task in Weekly or Daily view to schedule it for this date.';
-
-  @override
   String noneScheduledLine(String day, String total) {
     return '$day — $total total tasks, none scheduled.';
   }
-
-  @override
-  String get checkScheduledHint => 'Check the box for a task in Weekly or Daily view to schedule it for this date.';
 
   @override
   String get timerTitle => 'Timer';

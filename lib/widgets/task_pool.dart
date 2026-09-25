@@ -30,6 +30,8 @@ class TaskPool extends ConsumerStatefulWidget {
 class _TaskPoolState extends ConsumerState<TaskPool> {
   static const baseW = 184.0;
   static const baseH = 128.0;
+  static const canvasW = 4000.0;
+  static const canvasH = 3000.0;
 
   final _transCtrl = TransformationController();
   final Map<String, Offset> _pos = {};
@@ -72,7 +74,7 @@ class _TaskPoolState extends ConsumerState<TaskPool> {
   String? _scheduleOf(dynamic task) {
     final svc = ref.read(supabaseServiceProvider);
     final e = svc.entryFor(task.id as String, widget.date);
-    if (e == null || !(e.checked as bool)) return null;
+    if (e == null || !svc.isAssigned(e)) return null;
     final schedCol = widget.cols.where((c) => c.id == 'col_schedule' || c.type == ColumnType.schedule).firstOrNull;
     if (schedCol == null) return null;
     return e.data[schedCol.id] as String?;
@@ -102,7 +104,7 @@ class _TaskPoolState extends ConsumerState<TaskPool> {
     for (int i = 0; i < ordered.length; i++) {
       final id = ordered[i];
       if (_pos.containsKey(id)) continue;
-      _pos[id] = Offset(120.0 + (i % 4) * 250.0, 110.0 + (i ~/ 4) * 210.0);
+      _pos[id] = Offset(160.0 + (i % 5) * 300.0, 140.0 + (i ~/ 5) * 260.0);
     }
     _pos.removeWhere((id, _) => !widget.tasks.any((t) => (t.id as String) == id));
     // Refit the camera whenever the task set changes so ALL tasks are visible.
@@ -138,7 +140,7 @@ class _TaskPoolState extends ConsumerState<TaskPool> {
     final svc = ref.read(supabaseServiceProvider);
     final normSel = _norm(widget.date);
     final dates = svc.entries
-        .where((e) => e.taskId == taskId && (e.checked as bool))
+        .where((e) => e.taskId == taskId && svc.isAssigned(e))
         .map((e) => _norm(e.date as DateTime))
         .toSet()
         .toList()
@@ -163,15 +165,15 @@ class _TaskPoolState extends ConsumerState<TaskPool> {
       return Stack(children: [
       InteractiveViewer(
         transformationController: _transCtrl,
-        boundaryMargin: const EdgeInsets.all(600),
-        minScale: 0.2,
+        boundaryMargin: const EdgeInsets.all(1200),
+        minScale: 0.15,
         maxScale: 2.5,
         child: SizedBox(
-          width: 2000,
-          height: 1400,
+          width: _TaskPoolState.canvasW,
+          height: _TaskPoolState.canvasH,
           child: Stack(children: [
             CustomPaint(
-              size: const Size(2000, 1400),
+              size: const Size(_TaskPoolState.canvasW, _TaskPoolState.canvasH),
               painter: _LinkPainter(positions: Map.of(_pos), order: chain, nodeW: _nodeW, nodeH: _nodeH),
             ),
             for (final task in widget.tasks)
@@ -185,7 +187,7 @@ class _TaskPoolState extends ConsumerState<TaskPool> {
                     cols: widget.cols,
                     width: _nodeW,
                     height: _nodeH,
-                    highlight: (svc.entryFor(task.id as String, widget.date)?.checked ?? false),
+                    highlight: (() { final he = svc.entryFor(task.id as String, widget.date); return he != null && svc.isAssigned(he); })(),
                     onMoved: (d) => setState(() {
                       final p = _pos[task.id as String]!;
                       _pos[task.id as String] = p + d;
@@ -316,7 +318,7 @@ class _PoolNodeState extends ConsumerState<_PoolNode> {
   String? _timeLabel() {
     final svc = ref.read(supabaseServiceProvider);
     final e = svc.entryFor(widget.task.id as String, widget.date);
-    if (e == null || !(e.checked as bool)) return null;
+    if (e == null || !svc.isAssigned(e)) return null;
     final schedCol = widget.cols.where((c) => c.id == 'col_schedule' || c.type == ColumnType.schedule).firstOrNull;
     final raw = schedCol == null ? null : e.data[schedCol.id] as String?;
     if (raw == null || raw.isEmpty) return null;

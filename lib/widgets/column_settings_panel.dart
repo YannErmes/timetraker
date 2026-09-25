@@ -139,7 +139,8 @@ class _ColumnEditDialogState extends ConsumerState<_ColumnEditDialog> {
     _type = widget.existing?.type ?? ColumnType.text;
     _statusOpts = widget.existing?.statusOptions ??
         [
-          const StatusOption(id: 'none', label: 'none', colorHex: '#475569'),
+          const StatusOption(id: 'idle', label: 'idle', colorHex: '#475569'),
+          const StatusOption(id: 'none', label: 'none', colorHex: '#64748B'),
           const StatusOption(id: 'done', label: 'done', colorHex: '#22C55E'),
           const StatusOption(id: 'cancel', label: 'cancel', colorHex: '#F43F5E'),
           const StatusOption(id: 'in_progress', label: 'in progress', colorHex: '#F59E0B'),

@@ -112,41 +112,22 @@ class ColumnDefinition {
         'visible_days': visibleDays,
       };
 
+  /// First-install default: status column only (user adds more if wanted).
   static List<ColumnDefinition> defaultColumns() => [
-        ColumnDefinition(
-          id: 'col_schedule',
-          label: 'schedule',
-          type: ColumnType.schedule,
-          position: 0,
-          config: {},
-        ),
-        ColumnDefinition(
-          id: 'col_time',
-          label: 'time',
-          type: ColumnType.timer,
-          position: 1,
-          config: {},
-        ),
         ColumnDefinition(
           id: 'col_status',
           label: 'status',
           type: ColumnType.status,
-          position: 2,
+          position: 0,
           config: {
             'options': [
-              const StatusOption(id: 'none', label: 'none', colorHex: '#475569').toJson(),
+              const StatusOption(id: 'idle', label: 'idle', colorHex: '#475569').toJson(),
+              const StatusOption(id: 'none', label: 'none', colorHex: '#64748B').toJson(),
               const StatusOption(id: 'done', label: 'done', colorHex: '#22C55E').toJson(),
               const StatusOption(id: 'cancel', label: 'cancel', colorHex: '#F43F5E').toJson(),
               const StatusOption(id: 'in_progress', label: 'in progress', colorHex: '#F59E0B').toJson(),
             ]
           },
-        ),
-        ColumnDefinition(
-          id: 'col_note',
-          label: 'note',
-          type: ColumnType.text,
-          position: 3,
-          config: {},
         ),
       ];
 }

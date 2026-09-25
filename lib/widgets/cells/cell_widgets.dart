@@ -26,9 +26,10 @@ _PillStyle _pillFor(String? id) {
     case 'in_progress':
     case 'in progress':
       return _PillStyle(fill: AppColors.inProgressFill, text: AppColors.inProgressText, border: AppColors.inProgressBorder);
+    case 'idle':
     case 'none':
     default:
-      // none / unset = quiet slate, low contrast
+      // idle / none / unset = quiet slate, low contrast
       return _PillStyle(fill: AppColors.inputFill, text: AppColors.textSecondary, border: AppColors.inputBorder);
   }
 }
@@ -44,11 +45,25 @@ class StatusCell extends StatefulWidget {
 
 class _StatusCellState extends State<StatusCell> {
   bool _focused = false;
+
+  /// Options guaranteed to contain an 'idle' entry so unassigning is
+  /// always possible, even for columns created before idle existed.
+  List<StatusOption> get _effectiveOptions {
+    if (widget.options.any((o) => o.id == 'idle')) return widget.options;
+    return [const StatusOption(id: 'idle', label: 'idle', colorHex: '#475569'), ...widget.options];
+  }
+
   @override
   Widget build(BuildContext context) {
-    final effectiveId = widget.valueId ?? 'none';
+    final ids = _effectiveOptions.map((o) => o.id).toSet();
+    // Default to idle (unassigned); fall back to a valid option so the
+    // dropdown value always matches an item.
+    String effectiveId = widget.valueId ?? 'idle';
+    if (!ids.contains(effectiveId)) {
+      effectiveId = ids.contains('none') ? 'none' : _effectiveOptions.first.id;
+    }
     final pill = _pillFor(effectiveId);
-    final isSet = effectiveId != 'none';
+    final isSet = effectiveId != 'none' && effectiveId != 'idle';
     // If custom options, fall back to hex if not one of known ids
     Color fill = pill.fill;
     Color text = pill.text;
@@ -83,13 +98,13 @@ class _StatusCellState extends State<StatusCell> {
             dropdownColor: AppColors.surface,
             borderRadius: BorderRadius.circular(8),
             items: [
-              for (final o in widget.options)
+              for (final o in _effectiveOptions)
                 DropdownMenuItem(
                   value: o.id,
                   child: Row(children: [
                     Container(width: 8, height: 8, decoration: BoxDecoration(color: _pillFor(o.id).border, shape: BoxShape.circle)),
                     const SizedBox(width: 8),
-                    Expanded(child: Text(o.label, style: TextStyle(color: o.id == 'none' ? AppColors.textSecondary : AppColors.textPrimary, fontSize: 12), overflow: TextOverflow.ellipsis)),
+                    Expanded(child: Text(o.label, style: TextStyle(color: o.id == 'none' || o.id == 'idle' ? AppColors.textSecondary : AppColors.textPrimary, fontSize: 12), overflow: TextOverflow.ellipsis)),
                   ]),
                 ),
             ],

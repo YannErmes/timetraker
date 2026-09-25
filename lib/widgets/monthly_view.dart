@@ -91,7 +91,7 @@ class _MonthlyViewState extends ConsumerState<MonthlyView> {
               onPressed: () async {
                 try {
                   final svc = ref.read(supabaseServiceProvider);
-                  final count = await GoogleCalendarService.instance.syncMonth(anchor, svc.tasks, svc.entries);
+                  final count = await GoogleCalendarService.instance.syncMonth(anchor, svc.tasks, svc.entries, isAssigned: svc.isAssigned);
                   if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(t.syncedMsg('$count')), backgroundColor: AppColors.surface));
                 } catch (e) {
                   if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(t.syncFailedMsg('$e'))));
@@ -120,8 +120,8 @@ class _MonthlyViewState extends ConsumerState<MonthlyView> {
               final isCurrentMonth = d.month == anchor.month;
               final isToday = normalizeDate(d) == normalizeDate(DateTime.now());
               final isCurrentWeek = currentWeekRow != null && (i ~/ 7) == currentWeekRow;
-              // Checkbox = scheduled: only checked entries are considered scheduled for this day
-              final allScheduled = entries.where((e) => e.dateKey == _key(d) && e.checked).toList();
+              // Assigned = non-idle status: only those count as scheduled for this day
+              final allScheduled = entries.where((e) => e.dateKey == _key(d) && svc.isAssigned(e)).toList();
               // apply global task filters to scheduled entries for this day
               final filters = ref.watch(taskFiltersProvider);
               final cols = ref.watch(supabaseServiceProvider).columns;

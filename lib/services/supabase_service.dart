@@ -332,40 +332,9 @@ class SupabaseService {
       final r2 = await _client!.from('column_definitions').select().eq('user_id', userId!).order('position');
       _columns = (r2 as List).map((j) => ColumnDefinition.fromSupabase(Map<String, dynamic>.from(j))).toList();
     } else {
+      // No auto-adding of columns: the default workspace is status-only and
+      // users add what they need via Manage Columns.
       bool needsRefetch = false;
-      final hasSchedule = _columns.any((c) => c.id == 'col_schedule');
-      if (!hasSchedule) {
-        final schedule = ColumnDefinition.defaultColumns().firstWhere((c) => c.id == 'col_schedule');
-        for (final c in _columns) {
-          try {
-            await _client!.from('column_definitions').update({'position': c.position + 1}).eq('id', c.id).eq('user_id', userId!);
-          } catch (_) {}
-        }
-        try {
-          await _client!.from('column_definitions').upsert(schedule.toSupabase(userId!), onConflict: 'user_id,id');
-        } catch (_) {
-          try {
-            await _client!.from('column_definitions').insert(schedule.toSupabase(userId!));
-          } catch (e) {
-            debugPrint('insert schedule ignored: $e');
-          }
-        }
-        needsRefetch = true;
-      }
-      final hasNote = _columns.any((c) => c.id == 'col_note');
-      if (!hasNote) {
-        final note = ColumnDefinition.defaultColumns().firstWhere((c) => c.id == 'col_note');
-        try {
-          await _client!.from('column_definitions').upsert(note.copyWith(position: _columns.length + (hasSchedule ? 0 : 1)).toSupabase(userId!), onConflict: 'user_id,id');
-        } catch (_) {
-          try {
-            await _client!.from('column_definitions').insert(note.copyWith(position: _columns.length + (hasSchedule ? 0 : 1)).toSupabase(userId!));
-          } catch (e) {
-            debugPrint('insert note ignored: $e');
-          }
-        }
-        needsRefetch = true;
-      }
       final timeCol = _columns.where((c) => c.id == 'col_time').firstOrNull;
       if (timeCol != null && timeCol.type != ColumnType.timer) {
         await _client!.from('column_definitions').update({'type': ColumnType.timer.name, 'config': {}}).eq('id', 'col_time').eq('user_id', userId!);
@@ -686,10 +655,19 @@ class SupabaseService {
       if (!await GoogleCalendarService.instance.isConnected()) return;
       final task = _tasks.where((t) => t.id == entry.taskId).firstOrNull;
       if (task == null) return;
-      await GoogleCalendarService.instance.syncDay(task, entry);
+      await GoogleCalendarService.instance.syncDay(task, entry, assigned: isAssigned(entry));
     } catch (e) {
       debugPrint('Google auto-sync failed (will retry on next change): $e');
     }
+  }
+
+  /// An entry counts as assigned to its day when it is checked AND its
+  /// status (if any) is anything but idle. Idle = not assigned that day.
+  bool isAssigned(DayEntry e) {
+    if (!e.checked) return false;
+    final statusCol = _columns.where((c) => c.type == ColumnType.status).firstOrNull;
+    if (statusCol == null) return true;
+    return (e.data[statusCol.id] as String?) != 'idle';
   }
 
   Future<void> toggleChecked(String taskId, DateTime date, bool value) async {
@@ -700,6 +678,10 @@ class SupabaseService {
       var updated = existing.copyWith(checked: value);
       if (value && statusCol != null && !updated.data.containsKey(statusCol.id)) {
         updated = updated.withValue(statusCol.id, 'none');
+      }
+      if (!value && statusCol != null) {
+        // Unchecking unassigns: status back to idle.
+        updated = updated.withValue(statusCol.id, 'idle');
       }
       await upsertEntry(updated);
     } else {
@@ -712,14 +694,25 @@ class SupabaseService {
 
   Future<void> setCellValue(String taskId, DateTime date, String columnId, dynamic value) async {
     if (userId == null) return;
+    final col = _columns.where((c) => c.id == columnId).firstOrNull;
     final existing = entryFor(taskId, date);
     if (existing != null) {
-      await upsertEntry(existing.withValue(columnId, value));
+      var updated = existing.withValue(columnId, value);
+      if (col != null && col.type == ColumnType.status) {
+        // Status drives assignment: idle unassigns, anything else assigns.
+        updated = updated.copyWith(checked: value != null && value != 'idle');
+      }
+      await upsertEntry(updated);
     } else {
-      final e = DayEntry(id: _uuid.v4(), taskId: taskId, userId: userId!, date: DateTime(date.year, date.month, date.day), checked: false, data: {columnId: value});
+      var checked = false;
+      final data = <String, dynamic>{};
+      if (value != null) data[columnId] = value;
+      if (col != null && col.type == ColumnType.status) {
+        checked = value != null && value != 'idle';
+      }
+      final e = DayEntry(id: _uuid.v4(), taskId: taskId, userId: userId!, date: DateTime(date.year, date.month, date.day), checked: checked, data: data);
       await upsertEntry(e);
     }
-    final col = _columns.where((c) => c.id == columnId).firstOrNull;
     if (col != null && col.type == ColumnType.timer) {
       await _autoSyncStatus(taskId, date);
     }
@@ -751,7 +744,7 @@ class SupabaseService {
       final offset = Task.parseReminder(raw);
       if (offset == null) continue;
       final upcoming = _entries
-          .where((e) => e.taskId == t.id && e.checked && !e.date.isBefore(today))
+          .where((e) => e.taskId == t.id && isAssigned(e) && !e.date.isBefore(today))
           .toList()
         ..sort((a, b) => a.date.compareTo(b.date));
       for (final e in upcoming) {
@@ -857,7 +850,8 @@ class SupabaseService {
     return DateTime(date.year, date.month, date.day, h, m);
   }
 
-  Future<void> _autoSyncStatus(String taskId, DateTime date) async {    final statusCol = _columns.where((c) => c.type == ColumnType.status).firstOrNull;
+  Future<void> _autoSyncStatus(String taskId, DateTime date) async {
+    final statusCol = _columns.where((c) => c.type == ColumnType.status).firstOrNull;
     final timerCol = _columns.where((c) => c.type == ColumnType.timer).firstOrNull;
     if (statusCol == null || timerCol == null) return;
     final entry = entryFor(taskId, date);
@@ -877,7 +871,8 @@ class SupabaseService {
     if (cur == desired) return;
     final existing = entryFor(taskId, date);
     if (existing != null) {
-      await upsertEntry(existing.withValue(statusCol.id, desired));
+      // Timer-driven statuses assign the task to the day as well.
+      await upsertEntry(existing.withValue(statusCol.id, desired).copyWith(checked: true));
     }
   }
 
@@ -896,14 +891,14 @@ class SupabaseService {
         if (tv.effectiveElapsed(now) >= tv.durationSec && tv.durationSec > 0) {
           final completed = tv.paused(now);
           final updatedEntry = e.withValue(timerCol.id, completed.toJson());
-          final withStatus = updatedEntry.withValue(statusCol.id, 'done');
+          final withStatus = updatedEntry.withValue(statusCol.id, 'done').copyWith(checked: true);
           await upsertEntry(withStatus);
           // notify: timer done
           final task = _tasks.where((t) => t.id == e.taskId).firstOrNull;
           await NotificationService.instance.showTimerDone(_fallbackTaskName(task?.name));
           // also send next tasks for the day after a short delay
           Future.delayed(const Duration(seconds: 2), () async {
-            final nextEntries = _entries.where((en) => en.checked && en.date.year == now.year && en.date.month == now.month && en.date.day == now.day && en.taskId != e.taskId).take(3).toList();
+            final nextEntries = _entries.where((en) => isAssigned(en) && en.date.year == now.year && en.date.month == now.month && en.date.day == now.day && en.taskId != e.taskId).take(3).toList();
             if (nextEntries.isNotEmpty) {
               final names = nextEntries.map((en) {
                 final t = _tasks.where((tt) => tt.id == en.taskId).firstOrNull;
@@ -915,7 +910,7 @@ class SupabaseService {
         } else if (tv.running) {
           final curStatus = e.data[statusCol.id] as String?;
           if (curStatus != 'in_progress') {
-            await upsertEntry(e.withValue(statusCol.id, 'in_progress'));
+            await upsertEntry(e.withValue(statusCol.id, 'in_progress').copyWith(checked: true));
           }
           // schedule reminder if enabled (only once per start)
           final settings = await NotificationService.instance.getSettings();

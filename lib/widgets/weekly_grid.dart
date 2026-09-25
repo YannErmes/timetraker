@@ -49,6 +49,12 @@ class _WeeklyGridState extends ConsumerState<WeeklyGrid> {
   String _dateKey(DateTime d) =>
       '${d.year.toString().padLeft(4, '0')}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
 
+  String _cap(String s) => s.isEmpty ? s : s[0].toUpperCase() + s.substring(1);
+
+  /// The 48px schedule-toggle column is only needed when the workspace has
+  /// no visible status column (status values assign days on their own).
+  bool _needsToggle(List<ColumnDefinition> cols) => !cols.any((c) => c.type == ColumnType.status);
+
   /// Jump to the current week, scroll today's column into view and flash it.
   void _goToday() {
     final now = DateTime.now();
@@ -77,10 +83,10 @@ class _WeeklyGridState extends ConsumerState<WeeklyGrid> {
     final hidden = ref.read(columnVisibilityProvider);
     final cols = svc.columns.where((c) => !hidden.contains(c.id)).toList();
     final basic = ref.read(displayPrefsProvider).basicCells;
-    const checkboxWidth = 48.0;
     const fullColWidth = 132.0;
     const basicColWidth = 76.0;
-    final dayWidth = checkboxWidth +
+    final toggleW = _needsToggle(cols) ? 48.0 : 0.0;
+    final dayWidth = toggleW +
         cols.fold(0.0, (s, c) => s + ((basic && (c.type == ColumnType.timer || c.type == ColumnType.status)) ? basicColWidth : fullColWidth));
     final anchor = ref.read(selectedDateProvider);
     final prefs = ref.read(displayPrefsProvider);
@@ -159,13 +165,14 @@ class _WeeklyGridState extends ConsumerState<WeeklyGrid> {
     final prefs = ref.watch(displayPrefsProvider);
     final filters = ref.watch(taskFiltersProvider);
     final allTasksRaw = List.of(svc.tasks)..sort((a, b) => a.position.compareTo(b.position));
-    // Day order: tasks scheduled (checked) for the selected day come first,
-    // unscheduled ones after — no manual dragging needed.
+    // Day order: tasks assigned (non-idle status) for the selected day first.
     final allTasks = _applyFilters(allTasksRaw, svc, allCols, filters)
       ..sort((a, b) {
-        final ea = svc.entryFor(a.id, anchor)?.checked ?? false;
-        final eb = svc.entryFor(b.id, anchor)?.checked ?? false;
-        if (ea != eb) return ea ? -1 : 1;
+        final ea = svc.entryFor(a.id, anchor);
+        final eb = svc.entryFor(b.id, anchor);
+        final aa = ea != null && svc.isAssigned(ea);
+        final bb = eb != null && svc.isAssigned(eb);
+        if (aa != bb) return aa ? -1 : 1;
         return a.position.compareTo(b.position);
       });
 
@@ -235,14 +242,15 @@ class _WeeklyGridState extends ConsumerState<WeeklyGrid> {
   Widget _buildStickyGrid(BuildContext context, List tasks, List allTasks, List<ColumnDefinition> cols, List<DateTime> days, int rowsVisible, int rowPage) {
     final loc = AppLocalizations.of(context)!;
     const taskColWidth = 160.0;
-    const checkboxWidth = 48.0;
     const fullColWidth = 132.0;
     const basicColWidth = 76.0;
     final basic = ref.watch(displayPrefsProvider).basicCells;
+    // Schedule-toggle column only when no visible status column assigns days.
+    final toggleW = _needsToggle(cols) ? 48.0 : 0.0;
     // In Basic mode timer/status cells are icon-only, so they get narrow columns.
     double widthFor(ColumnDefinition col) =>
         (basic && (col.type == ColumnType.timer || col.type == ColumnType.status)) ? basicColWidth : fullColWidth;
-    final dayWidth = checkboxWidth + cols.fold(0.0, (s, c) => s + widthFor(c));
+    final dayWidth = toggleW + cols.fold(0.0, (s, c) => s + widthFor(c));
     final rightWidth = days.length * dayWidth;
     final totalTableWidth = taskColWidth + rightWidth;
     final screenWidth = MediaQuery.of(context).size.width;
@@ -274,19 +282,21 @@ class _WeeklyGridState extends ConsumerState<WeeklyGrid> {
                     )
                   : null,
               child: Column(children: [
-              Container(height: 28, color: AppColors.header, alignment: Alignment.center, child: Text(formatWeekday(d), style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: AppColors.textPrimary, letterSpacing: 0.6))),
-              SizedBox(height: 36, child: Row(children: [
-                SizedBox(
-                  width: checkboxWidth,
-                  child: Center(
-                    // Shrink the date to fit instead of wrapping to a second
-                    // line (which overflowed the fixed 64px header by ~2px).
-                    child: FittedBox(
-                      fit: BoxFit.scaleDown,
-                      child: Text(formatDayHeader(d), style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: AppColors.textSecondary), maxLines: 1),
-                    ),
-                  ),
+              Container(
+                height: 28,
+                color: AppColors.header,
+                alignment: Alignment.center,
+                padding: const EdgeInsets.symmetric(horizontal: 4),
+                // Date next to the day: "9/25/2026 Thursday".
+                child: FittedBox(
+                  fit: BoxFit.scaleDown,
+                  child: Text('${formatDayHeader(d)} ${_cap(formatWeekday(d))}',
+                      style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: AppColors.textPrimary, letterSpacing: 0.4),
+                      maxLines: 1),
                 ),
+              ),
+              SizedBox(height: 36, child: Row(children: [
+                if (toggleW > 0) const SizedBox(width: 48),
                 for (final col in cols) SizedBox(width: widthFor(col), child: Center(child: Text(col.label, style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: AppColors.textPrimary), maxLines: 1, overflow: TextOverflow.ellipsis))),
               ])),
             ]),
@@ -365,6 +375,7 @@ class _WeeklyGridState extends ConsumerState<WeeklyGrid> {
           isAlt: r % 2 == 1,
           flashDayKey: _flashDayKey,
           basic: basic,
+          showToggle: toggleW > 0,
           hovered: _hoverTaskId == (tasks[r] as Task).id,
           onHover: (h) => _setHover(h ? (tasks[r] as Task).id : null),
         ),
@@ -578,9 +589,10 @@ class _RightTaskRow extends ConsumerStatefulWidget {
   final bool isAlt;
   final String? flashDayKey;
   final bool basic;
+  final bool showToggle;
   final bool hovered;
   final ValueChanged<bool> onHover;
-  const _RightTaskRow({required this.task, required this.days, required this.cols, required this.isAlt, this.flashDayKey, required this.basic, required this.hovered, required this.onHover});
+  const _RightTaskRow({required this.task, required this.days, required this.cols, required this.isAlt, this.flashDayKey, required this.basic, required this.showToggle, required this.hovered, required this.onHover});
   @override
   ConsumerState<_RightTaskRow> createState() => _RightTaskRowState();
 }
@@ -590,9 +602,16 @@ class _RightTaskRowState extends ConsumerState<_RightTaskRow> {
       '${d.year.toString().padLeft(4, '0')}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
   double _widthFor(ColumnDefinition col) =>
       (widget.basic && (col.type == ColumnType.timer || col.type == ColumnType.status)) ? 76.0 : 132.0;
+  ColumnDefinition? get _statusCol {
+    for (final c in widget.cols) {
+      if (c.type == ColumnType.status) return c;
+    }
+    return null;
+  }
   @override
   Widget build(BuildContext context) {
     final svc = ref.watch(supabaseServiceProvider);
+    final loc = AppLocalizations.of(context)!;
     final task = widget.task;
     final days = widget.days;
     final cols = widget.cols;
@@ -618,8 +637,25 @@ class _RightTaskRowState extends ConsumerState<_RightTaskRow> {
             Builder(builder: (_) {
               final flash = widget.flashDayKey != null && _dateKey(d) == widget.flashDayKey;
               final flashBg = flash ? AppColors.accent.withValues(alpha: 0.12) : null;
+              final sc = _statusCol;
               return Row(mainAxisSize: MainAxisSize.min, children: [
-                Container(width: 48, height: 48, alignment: Alignment.center, decoration: BoxDecoration(color: flashBg, border: Border(left: BorderSide(color: AppColors.border))), child: Builder(builder: (_) { final e = svc.entryFor(task.id, d); final checked = e?.checked ?? false; return Checkbox(value: checked, onChanged: (v) => svc.toggleChecked(task.id, d, v ?? false), visualDensity: VisualDensity.compact, materialTapTargetSize: MaterialTapTargetSize.shrinkWrap); })),
+                if (widget.showToggle)
+                  Container(
+                      width: 48,
+                      height: 48,
+                      alignment: Alignment.center,
+                      decoration: BoxDecoration(color: flashBg, border: Border(left: BorderSide(color: AppColors.border))),
+                      child: Builder(builder: (_) {
+                        final e = svc.entryFor(task.id, d);
+                        final raw = sc == null ? null : e?.data[sc.id];
+                        // Status dot assigns the day (idle = unassigned); legacy
+                        // checkbox only when the workspace has no status column.
+                        if (sc == null) {
+                          final checked = e?.checked ?? false;
+                          return Checkbox(value: checked, onChanged: (v) => svc.toggleChecked(task.id, d, v ?? false), visualDensity: VisualDensity.compact, materialTapTargetSize: MaterialTapTargetSize.shrinkWrap);
+                        }
+                        return StatusDotButton(taskId: task.id, date: d, col: sc, rawValue: raw, title: loc.editColLabel(sc.label));
+                      })),
                 for (final col in cols) Container(width: _widthFor(col), height: 48, padding: EdgeInsets.symmetric(horizontal: 6, vertical: 8), decoration: BoxDecoration(color: flashBg, border: Border(left: BorderSide(color: AppColors.border))), alignment: Alignment.center, child: _Cell(taskId: task.id, date: d, col: col)),
               ]);
             }),

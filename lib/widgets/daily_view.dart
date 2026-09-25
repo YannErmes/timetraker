@@ -38,7 +38,10 @@ class _DailyViewState extends ConsumerState<DailyView> {
     final hidden = ref.watch(columnVisibilityProvider);
     final cols = allCols.where((c) => !hidden.contains(c.id)).toList();
     final date = ref.watch(selectedDateProvider);
-    final scheduledRaw = allTasks.where((t) => (svc.entryFor(t.id, date)?.checked ?? false)).toList();
+    final scheduledRaw = allTasks.where((t) {
+      final e = svc.entryFor(t.id, date);
+      return e != null && svc.isAssigned(e);
+    }).toList();
     final filters = ref.watch(taskFiltersProvider);
     final scheduledTasks = scheduledRaw.where((t) {
       if (filters.search.isNotEmpty && !t.name.toLowerCase().contains(filters.search.toLowerCase())) return false;
@@ -108,6 +111,9 @@ class _DailyViewState extends ConsumerState<DailyView> {
     final pct = total == 0 ? 0.0 : done / total;
     final width = MediaQuery.of(context).size.width;
     final crossAxisCount = width < 600 ? 1 : width < 900 ? 2 : width < 1300 ? 3 : 4;
+    // Taller cards on narrow screens so cells + note preview fit; squarer on desktop.
+    final cardAspect = width < 420 ? 0.72 : width < 600 ? 0.8 : width < 900 ? 0.92 : 1.0;
+    final gridGap = width < 600 ? 8.0 : 12.0;
     final dayLabel = '${formatWeekday(date)} ${formatDayHeader(date)}';
 
     return Container(
@@ -194,12 +200,12 @@ class _DailyViewState extends ConsumerState<DailyView> {
                   ]),
                 )
               : GridView.builder(
-                  padding: const EdgeInsets.all(12),
+                  padding: EdgeInsets.all(gridGap),
                   gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
                     crossAxisCount: crossAxisCount,
-                    crossAxisSpacing: 12,
-                    mainAxisSpacing: 12,
-                    childAspectRatio: 1.0,
+                    crossAxisSpacing: gridGap,
+                    mainAxisSpacing: gridGap,
+                    childAspectRatio: cardAspect,
                   ),
                   itemCount: tasks.length,
                   itemBuilder: (_, i) {
@@ -273,7 +279,14 @@ class _SquareTaskCard extends ConsumerWidget {
           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
           decoration: BoxDecoration(color: AppColors.header, borderRadius: BorderRadius.vertical(top: Radius.circular(16))),
           child: Row(children: [
-            Checkbox(value: checked, onChanged: (v) => svc.toggleChecked(task.id, date, v ?? false), visualDensity: VisualDensity.compact, materialTapTargetSize: MaterialTapTargetSize.shrinkWrap),
+            Builder(builder: (_) {
+              final sc = cols.where((c) => c.type == ColumnType.status).firstOrNull;
+              if (sc == null) {
+                return Checkbox(value: checked, onChanged: (v) => svc.toggleChecked(task.id, date, v ?? false), visualDensity: VisualDensity.compact, materialTapTargetSize: MaterialTapTargetSize.shrinkWrap);
+              }
+              final raw = entry?.data[sc.id];
+              return StatusDotButton(taskId: task.id, date: date, col: sc, rawValue: raw, title: loc.editColLabel(sc.label));
+            }),
             const SizedBox(width: 4),
             Expanded(child: Text(task.name.isEmpty ? loc.untitledCap : task.name, style: TextStyle(fontWeight: FontWeight.w700, color: AppColors.textPrimary, fontSize: 13), overflow: TextOverflow.ellipsis)),
             if ((task.reminder as String?)?.isNotEmpty == true)
