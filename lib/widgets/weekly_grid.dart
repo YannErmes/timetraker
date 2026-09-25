@@ -148,6 +148,7 @@ class _WeeklyGridState extends ConsumerState<WeeklyGrid> {
     ref.watch(columnsProvider);
     ref.watch(entriesProvider);
     final t = AppLocalizations.of(context)!;
+    final narrow = MediaQuery.of(context).size.width < 560;
     final allCols = List.of(svc.columns)..sort((a, b) => a.position.compareTo(b.position));
     final hidden = ref.watch(columnVisibilityProvider);
     final cols = allCols.where((c) => !hidden.contains(c.id)).toList();
@@ -183,13 +184,15 @@ class _WeeklyGridState extends ConsumerState<WeeklyGrid> {
       child: Column(children: [
         Container(
           color: AppColors.header,
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          padding: EdgeInsets.symmetric(horizontal: narrow ? 6 : 12, vertical: 8),
           child: Row(children: [
             IconButton(icon: Icon(Icons.chevron_left, color: AppColors.textSecondary), onPressed: () => ref.read(selectedDateProvider.notifier).state = anchor.subtract(Duration(days: 7))),
-            Text('${formatShort(allDays.first)} – ${formatShort(allDays.last)} ${allDays.first.year}',
-                style: TextStyle(fontWeight: FontWeight.w700, color: AppColors.textPrimary, fontSize: 13)),
+            Flexible(
+              child: Text('${formatShort(allDays.first)} – ${formatShort(allDays.last)} ${allDays.first.year}',
+                  style: TextStyle(fontWeight: FontWeight.w700, color: AppColors.textPrimary, fontSize: narrow ? 11 : 13), overflow: TextOverflow.ellipsis),
+            ),
             IconButton(icon: Icon(Icons.chevron_right, color: AppColors.textSecondary), onPressed: () => ref.read(selectedDateProvider.notifier).state = anchor.add(Duration(days: 7))),
-            const Spacer(),
+            if (!narrow) const Spacer(),
             if (daysVisible < allDays.length) ...[
               IconButton(icon: const Icon(Icons.chevron_left, size: 18), tooltip: t.prevDaysTip, onPressed: _dayPage > 0 ? () => setState(() => _dayPage--) : null),
               Text('${_dayPage + 1}/$dayPages', style: TextStyle(fontSize: 11, color: AppColors.textSecondary)),
@@ -198,7 +201,9 @@ class _WeeklyGridState extends ConsumerState<WeeklyGrid> {
             ],
             OutlinedButton(onPressed: _goToday, child: Text(t.today)),
             const SizedBox(width: 8),
-            FilledButton.icon(onPressed: () => _addTaskDialog(context), icon: const Icon(Icons.add, size: 16), label: Text(t.addTask)),
+            narrow
+                ? IconButton.filled(onPressed: () => _addTaskDialog(context), icon: Icon(Icons.add, size: 18), tooltip: t.addTask)
+                : FilledButton.icon(onPressed: () => _addTaskDialog(context), icon: Icon(Icons.add, size: 16), label: Text(t.addTask)),
           ]),
         ),
         Divider(height: 1, color: AppColors.border),

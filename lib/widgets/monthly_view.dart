@@ -59,6 +59,7 @@ class _MonthlyViewState extends ConsumerState<MonthlyView> {
     final anchor = ref.watch(selectedDateProvider);
     final days = monthDates(anchor);
     final monthLabel = DateFormat('MMMM yyyy').format(anchor);
+    final isNarrow = MediaQuery.of(context).size.width < 560;
     // Reference Mon..Sun for the localized weekday header.
     final weekdayRef = DateTime(2026, 9, 21);
     // Row index (0-5) of the week containing today, if today is visible in
@@ -76,12 +77,12 @@ class _MonthlyViewState extends ConsumerState<MonthlyView> {
       child: Column(children: [
         Container(
           color: AppColors.header,
-          padding: const EdgeInsets.all(12),
+          padding: EdgeInsets.all(isNarrow ? 8 : 12),
           child: Row(children: [
             IconButton(icon: Icon(Icons.chevron_left, color: AppColors.textSecondary), onPressed: () => ref.read(selectedDateProvider.notifier).state = DateTime(anchor.year, anchor.month - 1, 1)),
-            Text(monthLabel, style: TextStyle(fontWeight: FontWeight.w700, color: AppColors.textPrimary)),
+            Flexible(child: Text(monthLabel, style: TextStyle(fontWeight: FontWeight.w700, color: AppColors.textPrimary), overflow: TextOverflow.ellipsis)),
             IconButton(icon: Icon(Icons.chevron_right, color: AppColors.textSecondary), onPressed: () => ref.read(selectedDateProvider.notifier).state = DateTime(anchor.year, anchor.month + 1, 1)),
-            const Spacer(),
+            if (!isNarrow) const Spacer(),
             OutlinedButton(onPressed: _goToday, child: Text(t.today)),
             const SizedBox(width: 4),
             IconButton(
@@ -98,7 +99,9 @@ class _MonthlyViewState extends ConsumerState<MonthlyView> {
               },
             ),
             const SizedBox(width: 4),
-            FilledButton.icon(icon: const Icon(Icons.add, size: 16), label: Text(t.addTask), onPressed: () => _showAddTaskDialog(context, ref, anchor)),
+            isNarrow
+                ? IconButton.filled(onPressed: () => _showAddTaskDialog(context, ref, anchor), icon: Icon(Icons.add, size: 18), tooltip: t.addTask)
+                : FilledButton.icon(icon: const Icon(Icons.add, size: 16), label: Text(t.addTask), onPressed: () => _showAddTaskDialog(context, ref, anchor)),
           ]),
         ),
         Container(

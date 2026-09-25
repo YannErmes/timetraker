@@ -118,9 +118,9 @@ class _DailyViewState extends ConsumerState<DailyView> {
           padding: const EdgeInsets.all(12),
           child: Row(children: [
             IconButton(icon: Icon(Icons.chevron_left, color: AppColors.textSecondary), onPressed: () => ref.read(selectedDateProvider.notifier).state = date.subtract(Duration(days: 1))),
-            Text(formatDayHeader(date), style: TextStyle(fontWeight: FontWeight.w700, color: AppColors.textPrimary)),
+            Flexible(child: Text(formatDayHeader(date), style: TextStyle(fontWeight: FontWeight.w700, color: AppColors.textPrimary), overflow: TextOverflow.ellipsis)),
             const SizedBox(width: 8),
-            Text(formatWeekday(date), style: TextStyle(color: AppColors.textSecondary)),
+            Flexible(child: Text(formatWeekday(date), style: TextStyle(color: AppColors.textSecondary), overflow: TextOverflow.ellipsis)),
             IconButton(icon: Icon(Icons.chevron_right, color: AppColors.textSecondary), onPressed: () => ref.read(selectedDateProvider.notifier).state = date.add(Duration(days: 1))),
             const Spacer(),
             OutlinedButton(onPressed: () => ref.read(selectedDateProvider.notifier).state = DateTime.now(), child: Text(loc.today)),
