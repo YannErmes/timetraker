@@ -212,4 +212,82 @@ class NotificationService {
     if (!s.enabled || !s.timerReminder) return;
     await showImmediate(title: 'Reminder', body: '"$taskName" ends in $minutesLeft min');
   }
+
+  static const _kTaskReminderIds = 'task_reminder_ids';
+
+  /// Reconcile per-task reminder notifications with [desired]: cancel anything
+  /// stale, schedule anything new. Ids are stable hashes of the task id.
+  Future<void> syncTaskReminders(List<TaskReminderJob> desired) async {
+    final settings = await getSettings();
+    if (!settings.enabled) {
+      await cancelAllTaskReminders();
+      return;
+    }
+    final prefs = await SharedPreferences.getInstance();
+    final known = prefs.getStringList(_kTaskReminderIds) ?? [];
+    final want = desired.map((j) => j.taskId).toSet();
+    for (final id in known) {
+      if (!want.contains(id)) {
+        try {
+          await _plugin.cancel(_reminderNotifId(id));
+        } catch (_) {}
+      }
+    }
+    final scheduled = <String>[];
+    for (final job in desired) {
+      try {
+        final details = NotificationDetails(
+          android: AndroidNotificationDetails('tracker_task', _isFr ? 'Rappels de tâches' : 'Task reminders', channelDescription: _isFr ? 'Rappels avant une tâche' : 'Reminders before a task', importance: Importance.high, priority: Priority.high),
+          iOS: const DarwinNotificationDetails(),
+        );
+        await _plugin.zonedSchedule(
+          _reminderNotifId(job.taskId),
+          job.taskName,
+          job.body ?? (_isFr ? 'Commence dans ${job.label}' : 'Starts in ${job.label}'),
+          tz.TZDateTime.from(job.fireAt, tz.local),
+          details,
+          androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
+          uiLocalNotificationDateInterpretation: UILocalNotificationDateInterpretation.absoluteTime,
+          payload: 'task_reminder:${job.taskId}',
+        );
+        scheduled.add(job.taskId);
+      } catch (e) {
+        debugPrint('scheduleTaskReminder failed: $e');
+      }
+    }
+    await prefs.setStringList(_kTaskReminderIds, scheduled);
+  }
+
+  Future<void> cancelAllTaskReminders() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final known = prefs.getStringList(_kTaskReminderIds) ?? [];
+      for (final id in known) {
+        try {
+          await _plugin.cancel(_reminderNotifId(id));
+        } catch (_) {}
+      }
+      await prefs.remove(_kTaskReminderIds);
+    } catch (_) {}
+  }
+
+  /// Stable notification id derived from the task id.
+  static int _reminderNotifId(String taskId) {
+    int h = 0x811c9dc5;
+    for (int i = 0; i < taskId.length; i++) {
+      h ^= taskId.codeUnitAt(i);
+      h = (h * 0x01000193) & 0x7fffffff;
+    }
+    return 50000 + (h % 100000);
+  }
+}
+
+/// One upcoming per-task reminder to notify.
+class TaskReminderJob {
+  final String taskId;
+  final String taskName;
+  final DateTime fireAt;
+  final String label; // e.g. 3D, 10MI, reminder
+  final String? body; // message override (reminder-column cells)
+  const TaskReminderJob({required this.taskId, required this.taskName, required this.fireAt, required this.label, this.body});
 }

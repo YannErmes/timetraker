@@ -9,12 +9,15 @@ import '../providers/task_filters.dart';
 import '../providers/column_visibility.dart';
 import '../utils/date_utils.dart';
 import '../models/enums.dart';
+import '../models/task.dart';
 import '../models/column_definition.dart';
 import '../models/timer_value.dart';
 import 'cells/cell_widgets.dart';
 import 'cells/compact_cell.dart';
+import 'cells/reminder_cell.dart';
 import 'cells/timer_cell.dart';
 import 'note_editor_panel.dart';
+import 'reminder_dialog.dart';
 
 class DailyView extends ConsumerStatefulWidget {
   const DailyView({super.key});
@@ -273,17 +276,33 @@ class _SquareTaskCard extends ConsumerWidget {
             Checkbox(value: checked, onChanged: (v) => svc.toggleChecked(task.id, date, v ?? false), visualDensity: VisualDensity.compact, materialTapTargetSize: MaterialTapTargetSize.shrinkWrap),
             const SizedBox(width: 4),
             Expanded(child: Text(task.name.isEmpty ? loc.untitledCap : task.name, style: TextStyle(fontWeight: FontWeight.w700, color: AppColors.textPrimary, fontSize: 13), overflow: TextOverflow.ellipsis)),
+            if ((task.reminder as String?)?.isNotEmpty == true)
+              Tooltip(
+                message: loc.bellTip((task.reminder as String).toUpperCase()),
+                child: Padding(
+                  padding: const EdgeInsets.only(right: 2),
+                  child: Icon(Icons.notifications_outlined, size: 13, color: AppColors.accent),
+                ),
+              ),
             PopupMenuButton(
               color: AppColors.surface,
               icon: Icon(Icons.more_horiz, size: 16, color: AppColors.textSecondary),
               onSelected: (v) {
+                if (v == 'reminder') {
+                  showReminderDialog(context, task as Task);
+                  return;
+                }
                 if (v == 'rename') {
                   final c = TextEditingController(text: task.name);
                   showDialog(context: context, builder: (_) => AlertDialog(backgroundColor: AppColors.surface, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8), side: BorderSide(color: AppColors.border)), title: Text(loc.rename, style: TextStyle(color: AppColors.textPrimary)), content: TextField(controller: c, style: TextStyle(color: AppColors.textPrimary), decoration: InputDecoration(border: OutlineInputBorder())), actions: [TextButton(onPressed: () => Navigator.pop(context), child: Text(loc.cancel)), FilledButton(onPressed: () { svc.updateTask(task.copyWith(name: c.text)); Navigator.pop(context); }, child: Text(loc.save))]));
                 }
                 if (v == 'delete') svc.deleteTask(task.id);
               },
-              itemBuilder: (_) => [PopupMenuItem(value: 'rename', child: Text(loc.rename)), PopupMenuItem(value: 'delete', child: Text(loc.delete))],
+              itemBuilder: (_) => [
+                PopupMenuItem(value: 'reminder', child: Text((task.reminder as String?)?.isNotEmpty == true ? loc.reminderSet((task.reminder as String).toUpperCase()) : loc.setReminderItem)),
+                PopupMenuItem(value: 'rename', child: Text(loc.rename)),
+                PopupMenuItem(value: 'delete', child: Text(loc.delete)),
+              ],
             ),
           ]),
         ),
@@ -323,6 +342,9 @@ class _SquareTaskCard extends ConsumerWidget {
                         child = basic
                             ? CompactTimerIcon(taskId: task.id, date: date, columnId: col.id, rawValue: raw, title: loc.editColLabel(col.label))
                             : TimerCell(taskId: task.id, date: date, columnId: col.id, rawValue: raw);
+                        break;
+                      case ColumnType.reminder:
+                        child = ReminderCell(taskId: task.id, date: date, columnId: col.id, rawValue: raw);
                         break;
                       case ColumnType.checkbox:
                         child = Align(alignment: Alignment.centerLeft, child: Checkbox(value: raw == true, onChanged: (v) => svc.setCellValue(task.id, date, col.id, v), visualDensity: VisualDensity.compact));

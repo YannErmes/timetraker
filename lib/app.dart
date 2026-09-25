@@ -1,3 +1,5 @@
+import 'dart:ui';
+
 import 'package:flutter/material.dart';
 import 'package:tracker_sheet/l10n/app_localizations.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
@@ -22,6 +24,19 @@ class TrackerApp extends ConsumerStatefulWidget {
   const TrackerApp({super.key});
   @override
   ConsumerState<TrackerApp> createState() => _TrackerAppState();
+}
+
+/// Lets mouse/trackpad drag-scroll any scrollable (web trackpads and
+/// drag-to-scroll horizontally in Weekly), like touch does.
+class _AppScrollBehavior extends MaterialScrollBehavior {
+  @override
+  Set<PointerDeviceKind> get dragDevices => {
+        PointerDeviceKind.touch,
+        PointerDeviceKind.mouse,
+        PointerDeviceKind.stylus,
+        PointerDeviceKind.trackpad,
+        PointerDeviceKind.unknown,
+      };
 }
 
 class _TrackerAppState extends ConsumerState<TrackerApp> {
@@ -65,6 +80,7 @@ class _TrackerAppState extends ConsumerState<TrackerApp> {
       theme: _buildLightTheme(),
       darkTheme: _buildDarkTheme(),
       themeMode: prefs.lightMode ? ThemeMode.light : ThemeMode.dark,
+      scrollBehavior: _AppScrollBehavior(),
       localizationsDelegates: _appLocalizationsDelegates,
       supportedLocales: AppLocalizations.supportedLocales,
       // Browser/system language drives all text + dates.

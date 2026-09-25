@@ -7,6 +7,7 @@ import '../config/app_colors.dart';
 import '../providers/app_providers.dart';
 import '../providers/display_prefs.dart';
 import '../services/supabase_service.dart';
+import 'monthly_view.dart';
 import '../providers/task_filters.dart';
 import '../providers/column_visibility.dart';
 import '../models/task.dart';
@@ -15,8 +16,11 @@ import '../models/enums.dart';
 import '../utils/date_utils.dart';
 import 'cells/cell_widgets.dart';
 import 'cells/compact_cell.dart';
+import 'cells/reminder_cell.dart';
 import 'cells/timer_cell.dart';
+import 'monthly_view.dart';
 import 'note_editor_panel.dart';
+import 'reminder_dialog.dart';
 
 class WeeklyGrid extends ConsumerStatefulWidget {
   const WeeklyGrid({super.key});
@@ -38,20 +42,6 @@ class _WeeklyGridState extends ConsumerState<WeeklyGrid> {
 
   void _setHover(String? id) {
     if (_hoverTaskId != id) setState(() => _hoverTaskId = id);
-  }
-
-  /// Stable elevated proxy so the dragged row never collapses or jumps.
-  Widget _dragProxy(Widget child, int index, Animation<double> animation) {
-    return AnimatedBuilder(
-      animation: animation,
-      builder: (_, __) => Material(
-        elevation: 8,
-        color: Colors.transparent,
-        borderRadius: BorderRadius.circular(8),
-        child: Opacity(opacity: 0.96, child: child),
-      ),
-      child: child,
-    );
   }
 
   String _dateKey(DateTime d) =>
@@ -166,7 +156,15 @@ class _WeeklyGridState extends ConsumerState<WeeklyGrid> {
     final prefs = ref.watch(displayPrefsProvider);
     final filters = ref.watch(taskFiltersProvider);
     final allTasksRaw = List.of(svc.tasks)..sort((a, b) => a.position.compareTo(b.position));
-    final allTasks = _applyFilters(allTasksRaw, svc, allCols, filters);
+    // Day order: tasks scheduled (checked) for the selected day come first,
+    // unscheduled ones after — no manual dragging needed.
+    final allTasks = _applyFilters(allTasksRaw, svc, allCols, filters)
+      ..sort((a, b) {
+        final ea = svc.entryFor(a.id, anchor)?.checked ?? false;
+        final eb = svc.entryFor(b.id, anchor)?.checked ?? false;
+        if (ea != eb) return ea ? -1 : 1;
+        return a.position.compareTo(b.position);
+      });
 
     final daysVisible = prefs.daysVisible == 0 ? allDays.length : prefs.daysVisible;
     final dayPages = (allDays.length / daysVisible).ceil();
@@ -328,23 +326,19 @@ class _WeeklyGridState extends ConsumerState<WeeklyGrid> {
       child: shouldCenter ? Center(child: SizedBox(width: totalTableWidth, child: headerRowFixed)) : headerRowScrollable,
     );
 
-    // The task column IS the vertical scroller (stable drag auto-scroll).
-    // The data side mirrors its offset and never scrolls itself.
-    Widget leftColumn = ReorderableListView.builder(
-      scrollController: _vCtrl,
-      buildDefaultDragHandles: false,
-      proxyDecorator: _dragProxy,
+    // The task column IS the vertical scroller. Rows auto-sort with the
+    // selected day's scheduled (checked) tasks first — no manual dragging.
+    Widget leftColumn = ListView.builder(
+      controller: _vCtrl,
       padding: EdgeInsets.zero,
       itemCount: tasks.length,
-      onReorder: (o, n) => _handleReorder(o, n, allTasks, rowsVisible, rowPage),
       itemBuilder: (ctx, i) => _LeftTaskCell(
           key: ValueKey(tasks[i].id),
           task: tasks[i],
-          index: i,
           isAlt: i % 2 == 1,
+          hScrolled: _hScrolled,
           hovered: _hoverTaskId == (tasks[i] as Task).id,
           onHover: (h) => _setHover(h ? (tasks[i] as Task).id : null),
-          hScrolled: _hScrolled,
           onRename: () => _renameTask(context, tasks[i]),
           onNotesRecap: () => _showNotesRecap(context, tasks[i])),
     );
@@ -366,7 +360,15 @@ class _WeeklyGridState extends ConsumerState<WeeklyGrid> {
     Widget rightSide = SingleChildScrollView(
       controller: _vRightCtrl,
       physics: const NeverScrollableScrollPhysics(),
-      child: SingleChildScrollView(controller: _hBodyCtrl, scrollDirection: Axis.horizontal, physics: const ClampingScrollPhysics(), child: SizedBox(width: rightWidth, child: rightColumn)),
+      child: Scrollbar(
+        controller: _hBodyCtrl,
+        scrollbarOrientation: ScrollbarOrientation.bottom,
+        child: SingleChildScrollView(
+            controller: _hBodyCtrl,
+            scrollDirection: Axis.horizontal,
+            physics: const ClampingScrollPhysics(),
+            child: SizedBox(width: rightWidth, child: rightColumn)),
+      ),
     );
 
     Widget bodyRowScrollable = Row(
@@ -408,33 +410,6 @@ class _WeeklyGridState extends ConsumerState<WeeklyGrid> {
     ]);
   }
 
-  Future<void> _handleReorder(int oldIdx, int newIdx, List allTasks, int rowsVisible, int rowPage) async {
-    final svc = ref.read(supabaseServiceProvider);
-    int actualOld = oldIdx;
-    int actualNew = newIdx;
-    if (rowsVisible != 0) {
-      final base = rowPage * rowsVisible;
-      actualOld = base + oldIdx;
-      actualNew = base + newIdx;
-      if (actualNew > actualOld) actualNew -= 1;
-      actualOld = actualOld.clamp(0, allTasks.length - 1);
-      actualNew = actualNew.clamp(0, allTasks.length);
-    }
-    final sorted = List.of(svc.tasks)..sort((a, b) => a.position.compareTo(b.position));
-    final filteredIds = allTasks.map((t) => (t as Task).id).toList();
-    if (filteredIds.length == sorted.length) {
-      await svc.reorderTasks(actualOld, actualNew);
-    } else {
-      if (actualOld < filteredIds.length && actualNew < filteredIds.length) {
-        final oldId = filteredIds[actualOld];
-        final newId = filteredIds[actualNew > actualOld ? actualNew - 1 : actualNew];
-        final oldPos = sorted.indexWhere((t) => t.id == oldId);
-        final newPos = sorted.indexWhere((t) => t.id == newId);
-        if (oldPos != -1 && newPos != -1) await svc.reorderTasks(oldPos, newPos > oldPos ? newPos + 1 : newPos);
-      }
-    }
-  }
-
   List<Task> _applyFilters(List<Task> tasks, svc, List<ColumnDefinition> cols, TaskFilters f) {
     if (f.search.isEmpty && f.status == null && !f.hasNoteOnly && f.tag == null) return tasks;
     final statusCol = cols.where((c) => c.type == ColumnType.status).firstOrNull;
@@ -460,21 +435,8 @@ class _WeeklyGridState extends ConsumerState<WeeklyGrid> {
   }
 
   void _addTaskDialog(BuildContext context) {
-    final loc = AppLocalizations.of(context)!;
-    final c = TextEditingController();
-    showDialog(
-      context: context,
-      builder: (_) => AlertDialog(
-        backgroundColor: AppColors.surface,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8), side: BorderSide(color: AppColors.border)),
-        title: Text(loc.addTask, style: TextStyle(color: AppColors.textPrimary)),
-        content: TextField(controller: c, autofocus: true, style: TextStyle(color: AppColors.textPrimary), decoration: InputDecoration(labelText: loc.taskNameLbl)),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: Text(loc.cancel)),
-          FilledButton(onPressed: () { final svc = ref.read(supabaseServiceProvider); if (c.text.trim().isNotEmpty) svc.addTask(c.text.trim()); Navigator.pop(context); }, child: Text(loc.add)),
-        ],
-      ),
-    );
+    // Full create sheet: name (only required field) + optional days and params.
+    showAddTaskDialog(context, multiDate: true, initialDate: ref.read(selectedDateProvider));
   }
 
   void _renameTask(BuildContext context, dynamic task) {
@@ -515,14 +477,13 @@ class _WeeklyGridState extends ConsumerState<WeeklyGrid> {
 
 class _LeftTaskCell extends ConsumerStatefulWidget {
   final dynamic task;
-  final int index;
   final bool isAlt;
   final bool hScrolled;
   final bool hovered;
   final ValueChanged<bool> onHover;
   final VoidCallback onRename;
   final VoidCallback onNotesRecap;
-  const _LeftTaskCell({super.key, required this.task, required this.index, required this.isAlt, required this.hScrolled, required this.hovered, required this.onHover, required this.onRename, required this.onNotesRecap});
+  const _LeftTaskCell({super.key, required this.task, required this.isAlt, required this.hScrolled, required this.hovered, required this.onHover, required this.onRename, required this.onNotesRecap});
   @override
   ConsumerState<_LeftTaskCell> createState() => _LeftTaskCellState();
 }
@@ -563,19 +524,29 @@ class _LeftTaskCellState extends ConsumerState<_LeftTaskCell> {
         ),
         padding: const EdgeInsets.symmetric(horizontal: 8),
         child: Row(children: [
-          ReorderableDragStartListener(index: widget.index, child: Icon(Icons.drag_handle, size: 14, color: AppColors.textSecondary)),
-          const SizedBox(width: 6),
           Expanded(child: InkWell(onTap: widget.onRename, borderRadius: BorderRadius.circular(8), child: Padding(padding: const EdgeInsets.symmetric(vertical: 4), child: Text(task.name.isEmpty ? '—' : task.name, style: TextStyle(fontSize: 12, color: task.name.isEmpty ? AppColors.textSecondary : AppColors.textPrimary, fontWeight: FontWeight.w500), overflow: TextOverflow.ellipsis)))),
+          if ((task.reminder as String?)?.isNotEmpty == true)
+            Tooltip(
+              message: loc.bellTip((task.reminder as String).toUpperCase()),
+              child: Padding(
+                padding: const EdgeInsets.only(right: 2),
+                child: Icon(Icons.notifications_outlined, size: 13, color: AppColors.accent),
+              ),
+            ),
           PopupMenuButton(
             color: AppColors.surface,
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8), side: BorderSide(color: AppColors.border)),
             itemBuilder: (_) => [
               PopupMenuItem(value: 'notes', child: Text(noteCol == null ? loc.notesRecap : loc.notesRecapCount('$noteCount'))),
+              PopupMenuItem(
+                  value: 'reminder',
+                  child: Text((task.reminder as String?)?.isNotEmpty == true ? loc.reminderSet((task.reminder as String).toUpperCase()) : loc.setReminderItem)),
               PopupMenuItem(value: 'rename', child: Text(loc.rename)),
               PopupMenuItem(value: 'delete', child: Text(loc.delete)),
             ],
             onSelected: (v) {
               if (v == 'notes') widget.onNotesRecap();
+              if (v == 'reminder') showReminderDialog(context, task as Task);
               if (v == 'rename') widget.onRename();
               if (v == 'delete') svc.deleteTask(task.id);
             },
@@ -681,6 +652,8 @@ class _Cell extends ConsumerWidget {
           return CompactTimerIcon(taskId: taskId, date: date, columnId: col.id, rawValue: raw, title: loc.editColLabel(col.label));
         }
         return TimerCell(taskId: taskId, date: date, columnId: col.id, rawValue: raw);
+      case ColumnType.reminder:
+        return ReminderCell(taskId: taskId, date: date, columnId: col.id, rawValue: raw);
       case ColumnType.date:
         return InkWell(borderRadius: BorderRadius.circular(8), onTap: () async { final d = await showDatePicker(context: context, initialDate: raw != null ? DateTime.tryParse(raw) ?? DateTime.now() : DateTime.now(), firstDate: DateTime(2020), lastDate: DateTime(2035)); if (d != null) svc.setCellValue(taskId, date, col.id, d.toIso8601String().split('T').first); }, child: Container(height: 32, alignment: Alignment.centerLeft, padding: EdgeInsets.symmetric(horizontal: 8), decoration: BoxDecoration(color: AppColors.inputFill, borderRadius: BorderRadius.circular(8), border: Border.all(color: AppColors.inputBorder)), child: Text(raw ?? '—', style: TextStyle(fontSize: 11, color: AppColors.textSecondary))));
       case ColumnType.datetime:

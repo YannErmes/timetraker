@@ -41,7 +41,7 @@ final selectedDateProvider = StateProvider<DateTime>((ref) => DateTime.now());
 final viewModeProvider = StateProvider<ViewMode>((ref) => ViewMode.weekly);
 final isFilterSidebarCollapsedProvider = StateProvider<bool>((ref) => false);
 
-enum ViewMode { weekly, daily, monthly }
+enum ViewMode { weekly, daily, monthly, analytics }
 
 /// Request to open the note editor sidebar for one day-cell.
 class NoteEditorRequest {

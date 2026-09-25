@@ -89,6 +89,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                 ButtonSegment(value: ViewMode.weekly, label: Text(t.weekly), icon: Icon(Icons.view_week, size: 16)),
                 ButtonSegment(value: ViewMode.daily, label: Text(t.daily), icon: Icon(Icons.view_day, size: 16)),
                 ButtonSegment(value: ViewMode.monthly, label: Text(t.monthly), icon: Icon(Icons.calendar_month, size: 16)),
+                ButtonSegment(value: ViewMode.analytics, label: Text(t.analytics), icon: Icon(Icons.analytics_outlined, size: 16)),
               ],
               selected: {view},
               onSelectionChanged: (s) => ref.read(viewModeProvider.notifier).state = s.first,
@@ -110,7 +111,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           const ViewSettingsButton(),
           if (!isMobile) ...[
             IconButton(icon: Icon(Icons.view_column, color: AppColors.textSecondary), tooltip: t.manageColumns, onPressed: _openColumnManager),
-            IconButton(icon: Icon(Icons.analytics_outlined, color: AppColors.textSecondary), tooltip: t.analytics, onPressed: () => _showAnalytics(context, ref)),
             const SuggestionButton(),
           ] else ...[
             PopupMenuButton<String>(
@@ -118,7 +118,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
               tooltip: t.more,
               onSelected: (v) async {
                 if (v == 'columns') _openColumnManager();
-                if (v == 'analytics') _showAnalytics(context, ref);
+                if (v == 'analytics') ref.read(viewModeProvider.notifier).state = ViewMode.analytics;
                 if (v == 'suggest') {
                   if (context.mounted) showDialog(context: context, builder: (_) => const SuggestionDialog());
                   return;
@@ -212,6 +212,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                 ListTile(title: Text(t.weekly, style: TextStyle(color: AppColors.textPrimary)), selected: view == ViewMode.weekly, selectedTileColor: AppColors.inputFill, onTap: () { ref.read(viewModeProvider.notifier).state = ViewMode.weekly; Navigator.pop(context); }),
                 ListTile(title: Text(t.daily, style: TextStyle(color: AppColors.textPrimary)), selected: view == ViewMode.daily, selectedTileColor: AppColors.inputFill, onTap: () { ref.read(viewModeProvider.notifier).state = ViewMode.daily; Navigator.pop(context); }),
                 ListTile(title: Text(t.monthly, style: TextStyle(color: AppColors.textPrimary)), selected: view == ViewMode.monthly, selectedTileColor: AppColors.inputFill, onTap: () { ref.read(viewModeProvider.notifier).state = ViewMode.monthly; Navigator.pop(context); }),
+                ListTile(title: Text(t.analytics, style: TextStyle(color: AppColors.textPrimary)), selected: view == ViewMode.analytics, selectedTileColor: AppColors.inputFill, onTap: () { ref.read(viewModeProvider.notifier).state = ViewMode.analytics; Navigator.pop(context); }),
                 Divider(color: AppColors.border),
                 ListTile(title: Text(t.todayChecklist, style: TextStyle(color: AppColors.textSecondary)), onTap: () { ref.read(viewModeProvider.notifier).state = ViewMode.daily; Navigator.pop(context); }),
                 Divider(color: AppColors.border),
@@ -284,7 +285,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           ),
         ],
       ),
-      floatingActionButton: isMobile
+      floatingActionButton: isMobile && view != ViewMode.analytics
           ? FloatingActionButton(
               backgroundColor: AppColors.accent,
               foregroundColor: Colors.white,
@@ -296,12 +297,13 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           ? NavigationBar(
               backgroundColor: AppColors.header,
               indicatorColor: AppColors.accent,
-              selectedIndex: [ViewMode.weekly, ViewMode.daily, ViewMode.monthly].indexOf(view),
-              onDestinationSelected: (i) => ref.read(viewModeProvider.notifier).state = [ViewMode.weekly, ViewMode.daily, ViewMode.monthly][i],
+              selectedIndex: [ViewMode.weekly, ViewMode.daily, ViewMode.monthly, ViewMode.analytics].indexOf(view),
+              onDestinationSelected: (i) => ref.read(viewModeProvider.notifier).state = [ViewMode.weekly, ViewMode.daily, ViewMode.monthly, ViewMode.analytics][i],
               destinations: [
                 NavigationDestination(icon: Icon(Icons.view_week, color: AppColors.textSecondary), selectedIcon: Icon(Icons.view_week, color: Colors.white), label: t.weekly),
                 NavigationDestination(icon: Icon(Icons.view_day, color: AppColors.textSecondary), selectedIcon: Icon(Icons.view_day, color: Colors.white), label: t.daily),
                 NavigationDestination(icon: Icon(Icons.calendar_month, color: AppColors.textSecondary), selectedIcon: Icon(Icons.calendar_month, color: Colors.white), label: t.monthly),
+                NavigationDestination(icon: Icon(Icons.analytics_outlined, color: AppColors.textSecondary), selectedIcon: Icon(Icons.analytics_outlined, color: Colors.white), label: t.analytics),
               ],
             )
           : null,
@@ -316,6 +318,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         return const DailyView();
       case ViewMode.monthly:
         return const MonthlyView();
+      case ViewMode.analytics:
+        return const AnalyticsPage();
     }
   }
 
@@ -374,10 +378,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           ],
       ),
     );
-  }
-
-  void _showAnalytics(BuildContext context, WidgetRef ref) {
-    showDialog(context: context, builder: (_) => const AnalyticsDialog());
   }
 }
 

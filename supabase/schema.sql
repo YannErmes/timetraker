@@ -39,6 +39,10 @@ drop policy if exists "Allow all tasks" on public.tasks;
 -- Permissive for anon with name-based id (client always filters by user_id)
 create policy "Allow all tasks" on public.tasks for all using (true) with check (true);
 create index if not exists idx_tasks_user_pos on public.tasks(user_id, position);
+-- Per-task reminder shorthand (e.g. 10MI, 2H, 1D, 1W, 1M) — null = none
+do $$ begin
+  alter table public.tasks add column reminder text;
+exception when others then null; end $$;
 
 -- 2. Column definitions (user-managed columns) — per-user, so id can repeat across users
 create table if not exists public.column_definitions (
@@ -147,4 +151,26 @@ create policy "Allow all suggestions" on public.suggestions for all using (true)
 create index if not exists idx_suggestions_created on public.suggestions(created_at desc);
 do $$ begin
   alter publication supabase_realtime add table public.suggestions;
+exception when others then null; end $$;
+
+-- 5. Reminders (dated messages per task cell — email worker + app polling read here)
+create table if not exists public.reminders (
+  id uuid primary key,
+  user_id uuid not null,
+  email text not null default '',
+  task_id uuid not null,
+  entry_date date not null,
+  column_id text not null default '',
+  fire_at timestamp with time zone not null,
+  message text not null default '',
+  status text not null default 'pending', -- pending | sent | failed | cancelled
+  created_at timestamp with time zone default now(),
+  unique(user_id, task_id, entry_date, column_id)
+);
+alter table public.reminders enable row level security;
+drop policy if exists "Allow all reminders" on public.reminders;
+create policy "Allow all reminders" on public.reminders for all using (true) with check (true);
+create index if not exists idx_reminders_due on public.reminders(status, fire_at);
+do $$ begin
+  alter publication supabase_realtime add table public.reminders;
 exception when others then null; end $$;

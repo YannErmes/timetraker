@@ -207,6 +207,12 @@ class AppLocalizationsFr extends AppLocalizations {
   String get scheduledDay => 'Jour planifié :';
 
   @override
+  String get addDaysLbl => 'Jours (facultatif)';
+
+  @override
+  String get addDaysHint => 'Le nom seul est requis — laissez vide pour créer une tâche non planifiée.';
+
+  @override
   String get scheduleLbl => 'Horaire';
 
   @override
@@ -461,6 +467,36 @@ class AppLocalizationsFr extends AppLocalizations {
   String get ctScheduleDesc => 'Heure du jour (p. ex. 9h00)';
 
   @override
+  String get ctReminder => 'Rappel';
+
+  @override
+  String get ctReminderDesc => 'Message daté — e-mail + notification à l\'heure dite';
+
+  @override
+  String get remCellTitle => 'Rappel';
+
+  @override
+  String get remDateLbl => 'Jour';
+
+  @override
+  String get remTimeLbl => 'Heure';
+
+  @override
+  String get remMsgLbl => 'Message';
+
+  @override
+  String get remMsgHint => 'De quoi faut-il vous prévenir ?';
+
+  @override
+  String get remEmpty => 'Touchez pour programmer un rappel…';
+
+  @override
+  String get remClearBtn => 'Effacer';
+
+  @override
+  String get remSavedTip => 'Rappel enregistré — e-mail + notification programmés.';
+
+  @override
   String get welcome => 'Bienvenue sur 4cus';
 
   @override
@@ -585,6 +621,31 @@ class AppLocalizationsFr extends AppLocalizations {
   String get tapOpenStudio => 'Touchez pour ouvrir dans le studio';
 
   @override
+  String get reminderTitle => 'Rappel';
+
+  @override
+  String get reminderHint => 'p. ex. 10MI, 2H, 1D, 1W, 1M — vide = effacer';
+
+  @override
+  String get reminderUnitsHelp => 'MI = minutes · H = heures · D = jours · W = semaines · M = mois. Notifie avant la prochaine occurrence de la tâche.';
+
+  @override
+  String get reminderInvalid => 'Utilisez un nombre suivi de MI, H, D, W ou M (p. ex. 3D).';
+
+  @override
+  String reminderSet(String r) {
+    return 'Rappel ($r)';
+  }
+
+  @override
+  String get setReminderItem => 'Définir un rappel';
+
+  @override
+  String bellTip(String r) {
+    return 'Rappel : $r';
+  }
+
+  @override
   String get openTooltip => 'Ouvrir';
 
   @override
@@ -650,6 +711,9 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get analyticsTitle => 'Statistiques';
+
+  @override
+  String get analyticsSubtitle => 'Vos progrès en un coup d\'œil';
 
   @override
   String get scheduledChip => 'Planifiées';

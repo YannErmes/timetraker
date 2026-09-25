@@ -7,6 +7,7 @@ import '../providers/column_visibility.dart';
 import '../providers/task_filters.dart';
 import '../models/enums.dart';
 import 'cells/cell_widgets.dart';
+import 'cells/reminder_cell.dart';
 import 'cells/timer_cell.dart';
 
 class AndroidChecklist extends ConsumerWidget {
@@ -45,6 +46,13 @@ class AndroidChecklist extends ConsumerWidget {
       return true;
     }).toList();
     final date = ref.watch(selectedDateProvider);
+    // Day order: scheduled (checked) tasks first, the rest after.
+    tasks.sort((a, b) {
+      final ea = svc.entryFor(a.id, date)?.checked ?? false;
+      final eb = svc.entryFor(b.id, date)?.checked ?? false;
+      if (ea != eb) return ea ? -1 : 1;
+      return a.position.compareTo(b.position);
+    });
     final isSmall = MediaQuery.of(context).size.width < 380;
     return Container(
       color: AppColors.bg,
@@ -135,6 +143,8 @@ class AndroidChecklist extends ConsumerWidget {
                                     return DurationCell(value: raw as String?, onChanged: (v) => svc.setCellValue(t.id, date, col.id, v));
                                   case ColumnType.timer:
                                     return TimerCell(taskId: t.id, date: date, columnId: col.id, rawValue: raw);
+                                  case ColumnType.reminder:
+                                    return ReminderCell(taskId: t.id, date: date, columnId: col.id, rawValue: raw);
                                   case ColumnType.checkbox:
                                     return Align(alignment: Alignment.centerLeft, child: Checkbox(value: raw == true, onChanged: (v) => svc.setCellValue(t.id, date, col.id, v)));
                                   case ColumnType.tags:

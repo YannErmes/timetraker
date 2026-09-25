@@ -1,0 +1,27 @@
+# Calls the send-reminders Edge Function every 15 minutes so reminder
+# emails go out on time. All free: GitHub Actions (public repo) +
+# Supabase Edge Functions free tier + Resend free tier.
+#
+# One-time setup (GitHub repo > Settings > Secrets and variables > Actions):
+#   REMINDERS_URL          https://<project-ref>.supabase.co/functions/v1/send-reminders
+#   REMINDERS_CRON_SECRET  same random string as the CRON_SECRET edge secret
+name: Send due reminder emails
+
+on:
+  schedule:
+    - cron: "*/15 * * * *"
+  workflow_dispatch: # allow manual runs from the Actions tab
+
+jobs:
+  send:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Trigger send-reminders
+        run: |
+          code=$(curl -s -o /tmp/out.txt -w "%{http_code}" \
+            -X POST "${{ secrets.REMINDERS_URL }}" \
+            -H "x-cron-secret: ${{ secrets.REMINDERS_CRON_SECRET }}")
+          echo "HTTP $code"
+          cat /tmp/out.txt
+          test "$code" = "200"

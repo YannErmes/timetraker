@@ -234,7 +234,7 @@ class SupabaseService {
     try {
       final existingTasks = await _cache.loadTasks();
       final otherTasks = existingTasks.where((j) => j['user_id'] != uid).toList();
-      final currentTasks = _tasks.map((t) => {'id': t.id, 'name': t.name, 'position': t.position, 'created_at': t.createdAt.toIso8601String(), 'user_id': t.userId}).toList();
+      final currentTasks = _tasks.map((t) => {'id': t.id, 'name': t.name, 'position': t.position, 'created_at': t.createdAt.toIso8601String(), 'user_id': t.userId, 'reminder': t.reminder}).toList();
       await _cache.saveTasks([...otherTasks, ...currentTasks]);
 
       final existingCols = await _cache.loadColumns();
@@ -248,7 +248,7 @@ class SupabaseService {
       await _cache.saveEntries([...otherEntries, ...currentEntries]);
     } catch (_) {
       // fallback to just current
-      await _cache.saveTasks(_tasks.map((t) => {'id': t.id, 'name': t.name, 'position': t.position, 'created_at': t.createdAt.toIso8601String(), 'user_id': t.userId}).toList());
+      await _cache.saveTasks(_tasks.map((t) => {'id': t.id, 'name': t.name, 'position': t.position, 'created_at': t.createdAt.toIso8601String(), 'user_id': t.userId, 'reminder': t.reminder}).toList());
       await _cache.saveColumns(_columns.map((c) => c.toSupabase(uid)).toList());
       await _cache.saveEntries(_entries.map((e) => e.toSupabase()).toList());
     }
@@ -299,6 +299,7 @@ class SupabaseService {
     _ensureDefaultStatusForAll();
     _entriesCtrl.add(_entries);
     await _persistCache();
+    refreshTaskReminders();
   }
 
   Future<void> _fetchTasks() async {
@@ -416,10 +417,11 @@ class SupabaseService {
       return;
     }
     try {
-      await _client!.from('tasks').insert({'id': t.id, 'name': t.name, 'position': t.position, 'user_id': t.userId});
+      await _client!.from('tasks').insert({'id': t.id, 'name': t.name, 'position': t.position, 'user_id': t.userId, 'reminder': t.reminder});
     } catch (e) {
-      await _cache.enqueue(PendingMutation(id: _uuid.v4(), table: 'tasks', op: 'insert', payload: {'id': t.id, 'name': t.name, 'position': t.position, 'user_id': t.userId}, createdAt: DateTime.now()));
+      await _cache.enqueue(PendingMutation(id: _uuid.v4(), table: 'tasks', op: 'insert', payload: {'id': t.id, 'name': t.name, 'position': t.position, 'user_id': t.userId, 'reminder': t.reminder}, createdAt: DateTime.now()));
     }
+    refreshTaskReminders();
   }
 
   Future<void> updateTask(Task t) async {
@@ -428,10 +430,11 @@ class SupabaseService {
     await _persistCache();
     if (!isConfigured) return;
     try {
-      await _client!.from('tasks').update({'name': t.name, 'position': t.position}).eq('id', t.id).eq('user_id', t.userId);
+      await _client!.from('tasks').update({'name': t.name, 'position': t.position, 'reminder': t.reminder}).eq('id', t.id).eq('user_id', t.userId);
     } catch (e) {
-      await _cache.enqueue(PendingMutation(id: _uuid.v4(), table: 'tasks', op: 'update', payload: {'id': t.id, 'name': t.name, 'position': t.position, 'user_id': t.userId}, createdAt: DateTime.now()));
+      await _cache.enqueue(PendingMutation(id: _uuid.v4(), table: 'tasks', op: 'update', payload: {'id': t.id, 'name': t.name, 'position': t.position, 'user_id': t.userId, 'reminder': t.reminder}, createdAt: DateTime.now()));
     }
+    refreshTaskReminders();
   }
 
   Future<void> deleteTask(String id) async {
@@ -452,25 +455,7 @@ class SupabaseService {
     } catch (e) {
       await _cache.enqueue(PendingMutation(id: _uuid.v4(), table: 'tasks', op: 'delete', payload: {'id': id, 'user_id': uid}, createdAt: DateTime.now()));
     }
-  }
-
-  Future<void> reorderTasks(int oldIndex, int newIndex) async {
-    if (newIndex > oldIndex) newIndex -= 1;
-    final list = List<Task>.from(_tasks);
-    final item = list.removeAt(oldIndex);
-    list.insert(newIndex, item);
-    for (int i = 0; i < list.length; i++) {
-      list[i] = list[i].copyWith(position: i);
-    }
-    _tasks = list;
-    _tasksCtrl.add(_tasks);
-    await _persistCache();
-    if (!isConfigured) return;
-    for (final t in _tasks) {
-      try {
-        await _client!.from('tasks').update({'position': t.position}).eq('id', t.id).eq('user_id', t.userId);
-      } catch (_) {}
-    }
+    refreshTaskReminders();
   }
 
   // Columns CRUD — instant
@@ -660,6 +645,8 @@ class SupabaseService {
     await _persistCache();
     // auto-sync to Google Calendar if enabled (fire-and-forget, never blocks Supabase write)
     unawaited(_maybeSyncToGoogle(entry));
+    // recompute task reminders from local state (works offline too)
+    refreshTaskReminders();
     if (!isConfigured) return;
     try {
       // Merge with the latest server row so a concurrent edit from another
@@ -738,8 +725,139 @@ class SupabaseService {
     }
   }
 
-  Future<void> _autoSyncStatus(String taskId, DateTime date) async {
-    final statusCol = _columns.where((c) => c.type == ColumnType.status).firstOrNull;
+  /// Reconcile local notifications for per-task reminders (fire-and-forget).
+  /// Each task with a valid reminder notifies once before its next scheduled
+  /// occurrence (checked entry on/after today at its schedule time).
+  void refreshTaskReminders() {
+    unawaited(_refreshTaskReminders());
+  }
+
+  Future<void> _refreshTaskReminders() async {
+    try {
+      await NotificationService.instance.syncTaskReminders(_reminderJobs());
+    } catch (e) {
+      debugPrint('reminder refresh failed: $e');
+    }
+  }
+
+  List<TaskReminderJob> _reminderJobs() {
+    final jobs = <TaskReminderJob>[];
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final schedCol = _columns.where((c) => c.id == 'col_schedule' || c.type == ColumnType.schedule).firstOrNull;
+    for (final t in _tasks) {
+      final raw = (t.reminder ?? '').trim();
+      if (raw.isEmpty) continue;
+      final offset = Task.parseReminder(raw);
+      if (offset == null) continue;
+      final upcoming = _entries
+          .where((e) => e.taskId == t.id && e.checked && !e.date.isBefore(today))
+          .toList()
+        ..sort((a, b) => a.date.compareTo(b.date));
+      for (final e in upcoming) {
+        final when = _occurrenceAt(e.date, schedCol == null ? null : e.data[schedCol.id] as String?);
+        final fireAt = when.subtract(offset);
+        if (fireAt.isAfter(now)) {
+          jobs.add(TaskReminderJob(taskId: t.id, taskName: _fallbackTaskName(t.name), fireAt: fireAt, label: raw.toUpperCase()));
+          break;
+        }
+      }
+    }
+    // Reminder-column cells: dated messages with their own fire time.
+    final remCols = _columns.where((c) => c.type == ColumnType.reminder).toList();
+    for (final e in _entries) {
+      for (final c in remCols) {
+        final raw = e.data[c.id];
+        if (raw is! Map) continue;
+        final fireAt = DateTime.tryParse(raw['fireAt'] as String? ?? '');
+        final msg = (raw['message'] as String? ?? '').trim();
+        if (fireAt == null || !fireAt.isAfter(now)) continue;
+        final t = _tasks.where((tt) => tt.id == e.taskId).firstOrNull;
+        jobs.add(TaskReminderJob(
+          taskId: '${e.taskId}:${e.dateKey}:${c.id}',
+          taskName: _fallbackTaskName(t?.name),
+          fireAt: fireAt,
+          label: 'reminder',
+          body: msg.isEmpty ? null : msg,
+        ));
+      }
+    }
+    return jobs;
+  }
+
+  /// Save/clear a reminder-column cell (day + time + message).
+  /// Writes the day-entry cell AND upserts the matching `reminders` row
+  /// (consumed by the email worker); clearing removes both.
+  Future<void> setReminderCell({
+    required String taskId,
+    required DateTime date,
+    required String columnId,
+    required DateTime? when,
+    required String? message,
+  }) async {
+    if (userId == null) return;
+    final uid = userId!;
+    final day = DateTime(date.year, date.month, date.day);
+    final dateKey = DayEntry.dateToKey(day);
+    final existing = entryFor(taskId, day);
+    if (when == null) {
+      if (existing != null) {
+        await upsertEntry(existing.withValue(columnId, null));
+      }
+      if (isConfigured) {
+        try {
+          await _client!.from('reminders').delete().eq('user_id', uid).eq('task_id', taskId).eq('entry_date', dateKey).eq('column_id', columnId);
+        } catch (_) {}
+      }
+    } else {
+      final text = (message ?? '').trim();
+      final payload = {'fireAt': when.toIso8601String(), 'message': text};
+      if (existing != null) {
+        await upsertEntry(existing.withValue(columnId, payload));
+      } else {
+        final e = DayEntry(id: _uuid.v4(), taskId: taskId, userId: uid, date: day, checked: false, data: {columnId: payload});
+        await upsertEntry(e);
+      }
+      if (isConfigured) {
+        try {
+          await _client!.from('reminders').upsert({
+            'user_id': uid,
+            'email': _identity.name ?? '',
+            'task_id': taskId,
+            'entry_date': dateKey,
+            'column_id': columnId,
+            'fire_at': when.toIso8601String(),
+            'message': text,
+            'status': 'pending',
+          }, onConflict: 'user_id,task_id,entry_date,column_id');
+        } catch (e) {
+          await _cache.enqueue(PendingMutation(id: _uuid.v4(), table: 'reminders', op: 'upsert', payload: {
+            'user_id': uid,
+            'email': _identity.name ?? '',
+            'task_id': taskId,
+            'entry_date': dateKey,
+            'column_id': columnId,
+            'fire_at': when.toIso8601String(),
+            'message': text,
+            'status': 'pending',
+          }, createdAt: DateTime.now()));
+        }
+      }
+    }
+    refreshTaskReminders();
+  }
+
+  DateTime _occurrenceAt(DateTime date, String? hhmm) {
+    int h = 9, m = 0;
+    if (hhmm != null && hhmm.contains(':')) {
+      final parts = hhmm.split(':');
+      h = int.tryParse(parts[0]) ?? 9;
+      if (parts.length > 1) m = int.tryParse(parts[1].substring(0, 2)) ?? 0;
+    }
+    return DateTime(date.year, date.month, date.day, h, m);
+  }
+
+  Future<void> _autoSyncStatus(String taskId, DateTime date) async {    final statusCol = _columns.where((c) => c.type == ColumnType.status).firstOrNull;
     final timerCol = _columns.where((c) => c.type == ColumnType.timer).firstOrNull;
     if (statusCol == null || timerCol == null) return;
     final entry = entryFor(taskId, date);
@@ -861,6 +979,14 @@ class SupabaseService {
               var uq = _client!.from('day_entries').update(m.payload).eq('id', m.payload['id']);
               if (pUid != null) uq = uq.eq('user_id', pUid);
               await uq;
+            }
+            break;
+          case 'reminders':
+            if (m.op == 'upsert' || m.op == 'insert') {
+              await _client!.from('reminders').upsert(m.payload, onConflict: 'user_id,task_id,entry_date,column_id');
+            } else if (m.op == 'delete') {
+              var dq = _client!.from('reminders').delete().eq('user_id', m.payload['user_id']).eq('task_id', m.payload['task_id']).eq('entry_date', m.payload['entry_date']);
+              await dq;
             }
             break;
           case 'app_users':

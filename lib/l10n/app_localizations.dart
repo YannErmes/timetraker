@@ -455,6 +455,18 @@ abstract class AppLocalizations {
   /// **'Scheduled day:'**
   String get scheduledDay;
 
+  /// No description provided for @addDaysLbl.
+  ///
+  /// In en, this message translates to:
+  /// **'Days (optional)'**
+  String get addDaysLbl;
+
+  /// No description provided for @addDaysHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Name is the only required field — leave days empty to create an unscheduled task.'**
+  String get addDaysHint;
+
   /// No description provided for @scheduleLbl.
   ///
   /// In en, this message translates to:
@@ -923,6 +935,66 @@ abstract class AppLocalizations {
   /// **'Time-of-day for that day (e.g. 9:00 AM)'**
   String get ctScheduleDesc;
 
+  /// No description provided for @ctReminder.
+  ///
+  /// In en, this message translates to:
+  /// **'Reminder'**
+  String get ctReminder;
+
+  /// No description provided for @ctReminderDesc.
+  ///
+  /// In en, this message translates to:
+  /// **'Dated message — email + app notification at that time'**
+  String get ctReminderDesc;
+
+  /// No description provided for @remCellTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Reminder'**
+  String get remCellTitle;
+
+  /// No description provided for @remDateLbl.
+  ///
+  /// In en, this message translates to:
+  /// **'Day'**
+  String get remDateLbl;
+
+  /// No description provided for @remTimeLbl.
+  ///
+  /// In en, this message translates to:
+  /// **'Time'**
+  String get remTimeLbl;
+
+  /// No description provided for @remMsgLbl.
+  ///
+  /// In en, this message translates to:
+  /// **'Message'**
+  String get remMsgLbl;
+
+  /// No description provided for @remMsgHint.
+  ///
+  /// In en, this message translates to:
+  /// **'What should we remind you of?'**
+  String get remMsgHint;
+
+  /// No description provided for @remEmpty.
+  ///
+  /// In en, this message translates to:
+  /// **'Tap to set a reminder…'**
+  String get remEmpty;
+
+  /// No description provided for @remClearBtn.
+  ///
+  /// In en, this message translates to:
+  /// **'Clear'**
+  String get remClearBtn;
+
+  /// No description provided for @remSavedTip.
+  ///
+  /// In en, this message translates to:
+  /// **'Reminder saved — email + app notification scheduled.'**
+  String get remSavedTip;
+
   /// No description provided for @welcome.
   ///
   /// In en, this message translates to:
@@ -1151,6 +1223,48 @@ abstract class AppLocalizations {
   /// **'Tap to open in sidebar studio'**
   String get tapOpenStudio;
 
+  /// No description provided for @reminderTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Reminder'**
+  String get reminderTitle;
+
+  /// No description provided for @reminderHint.
+  ///
+  /// In en, this message translates to:
+  /// **'e.g. 10MI, 2H, 1D, 1W, 1M — empty clears it'**
+  String get reminderHint;
+
+  /// No description provided for @reminderUnitsHelp.
+  ///
+  /// In en, this message translates to:
+  /// **'MI = minutes · H = hours · D = days · W = weeks · M = months. Notifies before the task\'s next scheduled time.'**
+  String get reminderUnitsHelp;
+
+  /// No description provided for @reminderInvalid.
+  ///
+  /// In en, this message translates to:
+  /// **'Use a number followed by MI, H, D, W or M (e.g. 3D).'**
+  String get reminderInvalid;
+
+  /// No description provided for @reminderSet.
+  ///
+  /// In en, this message translates to:
+  /// **'Reminder ({r})'**
+  String reminderSet(String r);
+
+  /// No description provided for @setReminderItem.
+  ///
+  /// In en, this message translates to:
+  /// **'Set reminder'**
+  String get setReminderItem;
+
+  /// No description provided for @bellTip.
+  ///
+  /// In en, this message translates to:
+  /// **'Reminder: {r}'**
+  String bellTip(String r);
+
   /// No description provided for @openTooltip.
   ///
   /// In en, this message translates to:
@@ -1276,6 +1390,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Analytics'**
   String get analyticsTitle;
+
+  /// No description provided for @analyticsSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Your progress at a glance'**
+  String get analyticsSubtitle;
 
   /// No description provided for @scheduledChip.
   ///

@@ -8,6 +8,7 @@ import '../providers/column_visibility.dart';
 import '../models/enums.dart';
 import '../utils/date_utils.dart';
 import 'cells/cell_widgets.dart';
+import 'cells/reminder_cell.dart';
 import 'cells/timer_cell.dart';
 import 'note_editor_panel.dart';
 
@@ -103,6 +104,8 @@ class DayDetailPanel extends ConsumerWidget {
                                       return DurationCell(value: raw as String?, onChanged: (v) => svc.setCellValue(t.id, date, col.id, v));
                                     case ColumnType.timer:
                                       return TimerCell(taskId: t.id, date: date, columnId: col.id, rawValue: raw);
+                                    case ColumnType.reminder:
+                                      return ReminderCell(taskId: t.id, date: date, columnId: col.id, rawValue: raw);
                                     case ColumnType.checkbox:
                                       return Checkbox(value: raw == true, onChanged: (v) => svc.setCellValue(t.id, date, col.id, v));
                                     case ColumnType.tags:

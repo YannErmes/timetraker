@@ -227,17 +227,7 @@ class _MonthlyViewState extends ConsumerState<MonthlyView> {
     final sel = ref.read(selectedDateProvider);
     final isInMonth = sel.year == anchor.year && sel.month == anchor.month;
     final useDate = isInMonth ? sel : DateTime(anchor.year, anchor.month, 15);
-    showDialog(
-      context: context,
-      builder: (_) => Dialog(
-        backgroundColor: Colors.transparent,
-        insetPadding: const EdgeInsets.all(16),
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 520, maxHeight: 700),
-          child: _MonthlyAddTaskDialog(initialDate: useDate),
-        ),
-      ),
-    );
+    showAddTaskDialog(context, initialDate: useDate);
   }
 
   String _key(DateTime d) => '${d.year.toString().padLeft(4, '0')}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
@@ -251,13 +241,31 @@ class _MonthlyViewState extends ConsumerState<MonthlyView> {
 
 class _MonthlyAddTaskDialog extends ConsumerStatefulWidget {
   final DateTime initialDate;
-  const _MonthlyAddTaskDialog({required this.initialDate});
+  final bool multiDate;
+  const _MonthlyAddTaskDialog({required this.initialDate, this.multiDate = false});
   @override
   ConsumerState<_MonthlyAddTaskDialog> createState() => _MonthlyAddTaskDialogState();
 }
 
+/// Public entry point so Weekly view can reuse the full create sheet
+/// (with multi-date selection).
+Future<void> showAddTaskDialog(BuildContext context, {bool multiDate = false, DateTime? initialDate}) {
+  return showDialog(
+    context: context,
+    builder: (_) => Dialog(
+      backgroundColor: Colors.transparent,
+      insetPadding: const EdgeInsets.all(16),
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 520, maxHeight: 700),
+        child: _MonthlyAddTaskDialog(initialDate: initialDate ?? DateTime.now(), multiDate: multiDate),
+      ),
+    ),
+  );
+}
+
 class _MonthlyAddTaskDialogState extends ConsumerState<_MonthlyAddTaskDialog> {
   late DateTime _date;
+  late Set<DateTime> _dates;
   final _nameCtrl = TextEditingController();
   String? _schedule; // HH:mm
   String _durationText = '';
@@ -268,7 +276,12 @@ class _MonthlyAddTaskDialogState extends ConsumerState<_MonthlyAddTaskDialog> {
   void initState() {
     super.initState();
     _date = widget.initialDate;
+    // Multi mode starts with no days checked (name alone is enough);
+    // single mode keeps its one date.
+    _dates = widget.multiDate ? <DateTime>{} : {_norm(widget.initialDate)};
   }
+
+  DateTime _norm(DateTime d) => DateTime(d.year, d.month, d.day);
 
   @override
   void dispose() {
@@ -307,26 +320,77 @@ class _MonthlyAddTaskDialogState extends ConsumerState<_MonthlyAddTaskDialog> {
             child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
               TextField(controller: _nameCtrl, autofocus: true, style: TextStyle(color: AppColors.textPrimary), decoration: InputDecoration(labelText: loc.taskNameReq, hintText: loc.taskNameHint)),
               const SizedBox(height: 12),
-              InkWell(
-                borderRadius: BorderRadius.circular(8),
-                onTap: () async {
-                  final d = await showDatePicker(context: context, initialDate: _date, firstDate: DateTime(2020), lastDate: DateTime(2035));
-                  if (d != null) setState(() => _date = d);
-                },
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                  decoration: BoxDecoration(color: AppColors.inputFill, borderRadius: BorderRadius.circular(8), border: Border.all(color: AppColors.inputBorder)),
-                  child: Row(children: [
-                    Icon(Icons.calendar_today_rounded, size: 14, color: AppColors.textSecondary),
-                    const SizedBox(width: 8),
-                    Text(loc.scheduledDay, style: TextStyle(fontSize: 11, color: AppColors.textSecondary)),
-                    const SizedBox(width: 8),
-                    Text(_fmtDate(_date), style: TextStyle(fontSize: 12, color: AppColors.textPrimary, fontWeight: FontWeight.w600)),
-                    const Spacer(),
-                    Icon(Icons.arrow_drop_down, size: 18, color: AppColors.textSecondary),
-                  ]),
+              if (widget.multiDate) ...[
+                Row(children: [
+                  Icon(Icons.calendar_month_outlined, size: 14, color: AppColors.textSecondary),
+                  const SizedBox(width: 6),
+                  Text(loc.addDaysLbl, style: TextStyle(fontSize: 11, color: AppColors.textSecondary, fontWeight: FontWeight.w700)),
+                  const Spacer(),
+                  if (_dates.isNotEmpty)
+                    TextButton(
+                      onPressed: () => setState(() => _dates.clear()),
+                      style: TextButton.styleFrom(padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2), minimumSize: Size.zero, tapTargetSize: MaterialTapTargetSize.shrinkWrap),
+                      child: Text(loc.clearFiltersBtn, style: const TextStyle(fontSize: 11)),
+                    ),
+                ]),
+                const SizedBox(height: 6),
+                _MonthMultiPicker(
+                  initialMonth: _date,
+                  selected: _dates,
+                  onToggle: (d) => setState(() {
+                    if (_dates.contains(d)) {
+                      _dates.remove(d);
+                    } else {
+                      _dates.add(d);
+                    }
+                  }),
                 ),
-              ),
+                if (_dates.isNotEmpty) ...[
+                  const SizedBox(height: 8),
+                  Wrap(
+                    spacing: 6,
+                    runSpacing: 6,
+                    children: [
+                      for (final d in (_dates.toList()..sort()))
+                        InkWell(
+                          borderRadius: BorderRadius.circular(8),
+                          onTap: () => setState(() => _dates.remove(d)),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                            decoration: BoxDecoration(color: AppColors.accent.withValues(alpha: 0.16), borderRadius: BorderRadius.circular(8), border: Border.all(color: AppColors.accent.withValues(alpha: 0.5))),
+                            child: Row(mainAxisSize: MainAxisSize.min, children: [
+                              Text('${d.month}/${d.day}', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: AppColors.accent)),
+                              const SizedBox(width: 4),
+                              Icon(Icons.close, size: 12, color: AppColors.accent),
+                            ]),
+                          ),
+                        ),
+                    ],
+                  ),
+                ],
+                const SizedBox(height: 6),
+                Text(loc.addDaysHint, style: TextStyle(fontSize: 10, color: AppColors.textSecondary)),
+              ] else
+                InkWell(
+                  borderRadius: BorderRadius.circular(8),
+                  onTap: () async {
+                    final d = await showDatePicker(context: context, initialDate: _date, firstDate: DateTime(2020), lastDate: DateTime(2035));
+                    if (d != null) setState(() => _date = d);
+                  },
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                    decoration: BoxDecoration(color: AppColors.inputFill, borderRadius: BorderRadius.circular(8), border: Border.all(color: AppColors.inputBorder)),
+                    child: Row(children: [
+                      Icon(Icons.calendar_today_rounded, size: 14, color: AppColors.textSecondary),
+                      const SizedBox(width: 8),
+                      Text(loc.scheduledDay, style: TextStyle(fontSize: 11, color: AppColors.textSecondary)),
+                      const SizedBox(width: 8),
+                      Text(_fmtDate(_date), style: TextStyle(fontSize: 12, color: AppColors.textPrimary, fontWeight: FontWeight.w600)),
+                      const Spacer(),
+                      Icon(Icons.arrow_drop_down, size: 18, color: AppColors.textSecondary),
+                    ]),
+                  ),
+                ),
               const SizedBox(height: 12),
               // Schedule time-of-day
               Row(children: [
@@ -383,49 +447,170 @@ class _MonthlyAddTaskDialogState extends ConsumerState<_MonthlyAddTaskDialog> {
             TextButton(onPressed: () => Navigator.pop(context), child: Text(loc.cancel)),
             const SizedBox(width: 8),
             FilledButton(
-              onPressed: () async {
-                final name = _nameCtrl.text.trim();
-                if (name.isEmpty) return;
-                final svc = ref.read(supabaseServiceProvider);
-                // create task
-                await svc.addTask(name);
-                // find newly created task (last by position)
-                await Future.delayed(const Duration(milliseconds: 100));
-                final tasks = svc.tasks;
-                final created = tasks.where((t) => t.name == name).toList().isNotEmpty ? tasks.lastWhere((t) => t.name == name) : tasks.last;
-                // build per-day data
-                final data = <String, dynamic>{};
-                // find column ids
-                final cols = svc.columns;
-                String? scheduleId;
-                String? timeId;
-                String? statusId;
-                String? noteId;
-                for (final c in cols) {
-                  if (c.id == 'col_schedule' || (c.type.name == 'schedule')) scheduleId = c.id;
-                  if (c.id == 'col_time' || c.type.name == 'timer') timeId = c.id;
-                  if (c.type.name == 'status') statusId = c.id;
-                  if (c.id == 'col_note') noteId = c.id;
-                }
-                if (scheduleId != null && _schedule != null) data[scheduleId] = _schedule;
-                if (timeId != null && _durationText.trim().isNotEmpty) {
-                  final sec = TimerValue.parseDurationToSec(_durationText.trim());
-                  if (sec > 0) data[timeId] = TimerValue(durationSec: sec).toJson();
-                }
-                if (statusId != null && _status != null) data[statusId] = _status;
-                if (noteId != null && _noteCtrl.text.trim().isNotEmpty) data[noteId] = _noteCtrl.text.trim();
-                // schedule by checking box
-                await svc.toggleChecked(created.id, _date, true);
-                if (data.isNotEmpty) {
-                  for (final e in data.entries) {
-                    await svc.setCellValue(created.id, _date, e.key, e.value);
-                  }
-                }
-                if (context.mounted) Navigator.pop(context);
-              },
-              child: Text(loc.create),
+              onPressed: _creating ? null : _create,
+              child: _creating
+                  ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                  : Text(loc.create),
             ),
           ]),
+        ),
+      ]),
+    );
+  }
+
+  bool _creating = false;
+
+  /// Create the task (name only is required) and schedule it on the chosen
+  /// day(s) with the entered parameters. Empty day set = unscheduled task.
+  Future<void> _create() async {
+    final name = _nameCtrl.text.trim();
+    if (name.isEmpty || _creating) return;
+    setState(() => _creating = true);
+    try {
+      final svc = ref.read(supabaseServiceProvider);
+      await svc.addTask(name);
+      // find newly created task (last by position)
+      await Future.delayed(const Duration(milliseconds: 100));
+      final tasks = svc.tasks;
+      final created = tasks.where((t) => t.name == name).toList().isNotEmpty ? tasks.lastWhere((t) => t.name == name) : tasks.last;
+      // build per-day data
+      final data = <String, dynamic>{};
+      // find column ids
+      final cols = svc.columns;
+      String? scheduleId;
+      String? timeId;
+      String? statusId;
+      String? noteId;
+      for (final c in cols) {
+        if (c.id == 'col_schedule' || (c.type.name == 'schedule')) scheduleId = c.id;
+        if (c.id == 'col_time' || c.type.name == 'timer') timeId = c.id;
+        if (c.type.name == 'status') statusId = c.id;
+        if (c.id == 'col_note') noteId = c.id;
+      }
+      if (scheduleId != null && _schedule != null) data[scheduleId] = _schedule;
+      if (timeId != null && _durationText.trim().isNotEmpty) {
+        final sec = TimerValue.parseDurationToSec(_durationText.trim());
+        if (sec > 0) data[timeId] = TimerValue(durationSec: sec).toJson();
+      }
+      if (statusId != null && _status != null) data[statusId] = _status;
+      if (noteId != null && _noteCtrl.text.trim().isNotEmpty) data[noteId] = _noteCtrl.text.trim();
+      // schedule by checking box on each chosen day (none = unscheduled)
+      final targetDates = widget.multiDate ? (_dates.toList()..sort()) : [_date];
+      for (final rawDay in targetDates) {
+        final day = DateTime(rawDay.year, rawDay.month, rawDay.day);
+        await svc.toggleChecked(created.id, day, true);
+        if (data.isNotEmpty) {
+          for (final e in data.entries) {
+            await svc.setCellValue(created.id, day, e.key, e.value);
+          }
+        }
+      }
+      if (mounted) Navigator.pop(context);
+    } finally {
+      if (mounted) setState(() => _creating = false);
+    }
+  }
+}
+
+/// Month calendar multi-picker for the create sheet: navigate months and
+/// tap any days — one, several, or none. Selected days also list as chips.
+class _MonthMultiPicker extends StatefulWidget {
+  final DateTime initialMonth;
+  final Set<DateTime> selected;
+  final ValueChanged<DateTime> onToggle;
+  const _MonthMultiPicker({required this.initialMonth, required this.selected, required this.onToggle});
+  @override
+  State<_MonthMultiPicker> createState() => _MonthMultiPickerState();
+}
+
+class _MonthMultiPickerState extends State<_MonthMultiPicker> {
+  late DateTime _shown;
+
+  @override
+  void initState() {
+    super.initState();
+    _shown = DateTime(widget.initialMonth.year, widget.initialMonth.month, 1);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final first = DateTime(_shown.year, _shown.month, 1);
+    final start = first.subtract(Duration(days: first.weekday - 1));
+    final days = List.generate(42, (i) => start.add(Duration(days: i)));
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final mondayRef = DateTime(2026, 9, 21); // a Monday for weekday labels
+    return Container(
+      padding: const EdgeInsets.all(8),
+      decoration: BoxDecoration(color: AppColors.inputFill, borderRadius: BorderRadius.circular(12), border: Border.all(color: AppColors.border)),
+      child: Column(mainAxisSize: MainAxisSize.min, children: [
+        Row(children: [
+          IconButton(
+            icon: Icon(Icons.chevron_left, size: 18, color: AppColors.textSecondary),
+            constraints: const BoxConstraints.tightFor(width: 30, height: 30),
+            padding: EdgeInsets.zero,
+            onPressed: () => setState(() => _shown = DateTime(_shown.year, _shown.month - 1, 1)),
+          ),
+          Expanded(
+            child: Center(
+              child: Text(DateFormat('MMMM yyyy').format(_shown),
+                  style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: AppColors.textPrimary)),
+            ),
+          ),
+          IconButton(
+            icon: Icon(Icons.chevron_right, size: 18, color: AppColors.textSecondary),
+            constraints: const BoxConstraints.tightFor(width: 30, height: 30),
+            padding: EdgeInsets.zero,
+            onPressed: () => setState(() => _shown = DateTime(_shown.year, _shown.month + 1, 1)),
+          ),
+        ]),
+        const SizedBox(height: 4),
+        Row(
+          children: List.generate(7, (i) => mondayRef.add(Duration(days: i)))
+              .map((w) => Expanded(
+                      child: Center(
+                          child: Text(DateFormat('EEE').format(w),
+                              style: TextStyle(fontSize: 9, fontWeight: FontWeight.w700, color: AppColors.textSecondary)))))
+              .toList(),
+        ),
+        const SizedBox(height: 4),
+        GridView.builder(
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(crossAxisCount: 7, childAspectRatio: 1.15, crossAxisSpacing: 3, mainAxisSpacing: 3),
+          itemCount: days.length,
+          itemBuilder: (_, i) {
+            final d = days[i];
+            final sel = widget.selected.contains(d);
+            final isToday = d == today;
+            final inMonth = d.month == _shown.month;
+            return InkWell(
+              borderRadius: BorderRadius.circular(8),
+              onTap: () => widget.onToggle(d),
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 180),
+                curve: Curves.easeOutCubic,
+                decoration: BoxDecoration(
+                  color: sel ? AppColors.accent : Colors.transparent,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(
+                      color: sel
+                          ? AppColors.accent
+                          : (isToday ? AppColors.accent.withValues(alpha: 0.6) : Colors.transparent),
+                      width: sel ? 1.5 : 1),
+                ),
+                child: Center(
+                  child: Text('${d.day}',
+                      style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: sel ? FontWeight.w700 : FontWeight.w500,
+                          color: sel
+                              ? Colors.white
+                              : (inMonth ? AppColors.textPrimary : AppColors.textSecondary.withValues(alpha: 0.55)))),
+                ),
+              ),
+            );
+          },
         ),
       ]),
     );

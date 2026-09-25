@@ -11,6 +11,7 @@ enum ColumnType {
   text,
   timer,
   schedule,
+  reminder,
 }
 
 extension ColumnTypeX on ColumnType {
@@ -34,6 +35,8 @@ extension ColumnTypeX on ColumnType {
         return 'Time Length Selector';
       case ColumnType.schedule:
         return 'Schedule';
+      case ColumnType.reminder:
+        return 'Reminder';
     }
   }
 
@@ -58,6 +61,8 @@ extension ColumnTypeX on ColumnType {
         return t.ctTimer;
       case ColumnType.schedule:
         return t.ctSchedule;
+      case ColumnType.reminder:
+        return t.ctReminder;
     }
   }
 
@@ -81,6 +86,8 @@ extension ColumnTypeX on ColumnType {
         return 'Estimated duration + live countdown timer';
       case ColumnType.schedule:
         return 'Time-of-day for that day (e.g. 9:00 AM)';
+      case ColumnType.reminder:
+        return 'Dated message — email + app notification at that time';
     }
   }
 
@@ -105,6 +112,8 @@ extension ColumnTypeX on ColumnType {
         return t.ctTimerDesc;
       case ColumnType.schedule:
         return t.ctScheduleDesc;
+      case ColumnType.reminder:
+        return t.ctReminderDesc;
     }
   }
 
@@ -128,6 +137,8 @@ extension ColumnTypeX on ColumnType {
         return Icons.hourglass_bottom_rounded;
       case ColumnType.schedule:
         return Icons.access_time_rounded;
+      case ColumnType.reminder:
+        return Icons.notifications_outlined;
     }
   }
 

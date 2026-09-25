@@ -207,6 +207,12 @@ class AppLocalizationsEn extends AppLocalizations {
   String get scheduledDay => 'Scheduled day:';
 
   @override
+  String get addDaysLbl => 'Days (optional)';
+
+  @override
+  String get addDaysHint => 'Name is the only required field — leave days empty to create an unscheduled task.';
+
+  @override
   String get scheduleLbl => 'Schedule';
 
   @override
@@ -461,6 +467,36 @@ class AppLocalizationsEn extends AppLocalizations {
   String get ctScheduleDesc => 'Time-of-day for that day (e.g. 9:00 AM)';
 
   @override
+  String get ctReminder => 'Reminder';
+
+  @override
+  String get ctReminderDesc => 'Dated message — email + app notification at that time';
+
+  @override
+  String get remCellTitle => 'Reminder';
+
+  @override
+  String get remDateLbl => 'Day';
+
+  @override
+  String get remTimeLbl => 'Time';
+
+  @override
+  String get remMsgLbl => 'Message';
+
+  @override
+  String get remMsgHint => 'What should we remind you of?';
+
+  @override
+  String get remEmpty => 'Tap to set a reminder…';
+
+  @override
+  String get remClearBtn => 'Clear';
+
+  @override
+  String get remSavedTip => 'Reminder saved — email + app notification scheduled.';
+
+  @override
   String get welcome => 'Welcome to 4cus';
 
   @override
@@ -585,6 +621,31 @@ class AppLocalizationsEn extends AppLocalizations {
   String get tapOpenStudio => 'Tap to open in sidebar studio';
 
   @override
+  String get reminderTitle => 'Reminder';
+
+  @override
+  String get reminderHint => 'e.g. 10MI, 2H, 1D, 1W, 1M — empty clears it';
+
+  @override
+  String get reminderUnitsHelp => 'MI = minutes · H = hours · D = days · W = weeks · M = months. Notifies before the task\'s next scheduled time.';
+
+  @override
+  String get reminderInvalid => 'Use a number followed by MI, H, D, W or M (e.g. 3D).';
+
+  @override
+  String reminderSet(String r) {
+    return 'Reminder ($r)';
+  }
+
+  @override
+  String get setReminderItem => 'Set reminder';
+
+  @override
+  String bellTip(String r) {
+    return 'Reminder: $r';
+  }
+
+  @override
   String get openTooltip => 'Open';
 
   @override
@@ -650,6 +711,9 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get analyticsTitle => 'Analytics';
+
+  @override
+  String get analyticsSubtitle => 'Your progress at a glance';
 
   @override
   String get scheduledChip => 'Scheduled';
