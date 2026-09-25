@@ -1,0 +1,48 @@
+# Builds the 4cus Windows .exe on a free GitHub-hosted runner
+# (which has Visual Studio preinstalled).
+#
+# One-time setup (GitHub repo > Settings > Secrets and variables > Actions):
+#   SUPABASE_URL       https://<project-ref>.supabase.co
+#   SUPABASE_ANON_KEY  the anon/public key
+# Then: Actions tab > "Build Windows EXE" > Run workflow >
+# download the `4cus-windows` artifact (zip with 4cus.exe + DLLs).
+name: Build Windows EXE
+
+on:
+  workflow_dispatch: # manual run from the Actions tab
+
+jobs:
+  build:
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - name: Check secrets
+        shell: pwsh
+        run: |
+          if ("${{ secrets.SUPABASE_URL }}" -eq "" -or "${{ secrets.SUPABASE_ANON_KEY }}" -eq "") {
+            Write-Error "Add SUPABASE_URL and SUPABASE_ANON_KEY to repo Settings > Secrets and variables > Actions first."
+            exit 1
+          }
+
+      - uses: actions/checkout@v4
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - run: flutter config --enable-windows-desktop
+      - run: flutter pub get
+
+      - name: Build EXE
+        run: flutter build windows --release --dart-define=SUPABASE_URL=${{ secrets.SUPABASE_URL }} --dart-define=SUPABASE_ANON_KEY=${{ secrets.SUPABASE_ANON_KEY }}
+
+      - name: Zip
+        shell: pwsh
+        run: Compress-Archive -Path build\windows\x64\runner\Release\* -DestinationPath 4cus-windows.zip
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: 4cus-windows
+          path: 4cus-windows.zip
+          retention-days: 30
