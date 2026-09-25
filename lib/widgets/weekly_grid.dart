@@ -18,6 +18,7 @@ import 'cells/cell_widgets.dart';
 import 'cells/compact_cell.dart';
 import 'cells/reminder_cell.dart';
 import 'cells/timer_cell.dart';
+import 'task_pool.dart';
 import 'monthly_view.dart';
 import 'note_editor_panel.dart';
 import 'reminder_dialog.dart';
@@ -39,6 +40,7 @@ class _WeeklyGridState extends ConsumerState<WeeklyGrid> {
   String? _flashDayKey; // dateKey of the day column to flash-highlight
   Timer? _flashTimer;
   String? _hoverTaskId; // task id of the hovered row (shared by both halves)
+  bool _pool = false; // mind-map pool layout instead of the table
 
   void _setHover(String? id) {
     if (_hoverTaskId != id) setState(() => _hoverTaskId = id);
@@ -200,15 +202,21 @@ class _WeeklyGridState extends ConsumerState<WeeklyGrid> {
               const SizedBox(width: 4),
             ],
             OutlinedButton(onPressed: _goToday, child: Text(t.today)),
-            const SizedBox(width: 8),
+            const SizedBox(width: 4),
+            IconButton(
+              icon: Icon(_pool ? Icons.table_chart_outlined : Icons.account_tree_outlined, color: AppColors.textSecondary),
+              tooltip: _pool ? t.tableView : t.poolView,
+              onPressed: () => setState(() => _pool = !_pool),
+            ),
+            const SizedBox(width: 4),
             narrow
                 ? IconButton.filled(onPressed: () => _addTaskDialog(context), icon: Icon(Icons.add, size: 18), tooltip: t.addTask)
                 : FilledButton.icon(onPressed: () => _addTaskDialog(context), icon: Icon(Icons.add, size: 16), label: Text(t.addTask)),
           ]),
         ),
         Divider(height: 1, color: AppColors.border),
-        Expanded(child: _buildStickyGrid(context, tasks, allTasks, cols, days, rowsVisible, _rowPage)),
-        if (rowsVisible != 0 && rowPages > 1)
+        Expanded(child: _pool ? TaskPool(tasks: allTasks, cols: allCols, date: anchor) : _buildStickyGrid(context, tasks, allTasks, cols, days, rowsVisible, _rowPage)),
+        if (!_pool && rowsVisible != 0 && rowPages > 1)
           Container(
             color: AppColors.header,
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),

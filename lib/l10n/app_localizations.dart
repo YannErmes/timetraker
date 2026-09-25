@@ -395,6 +395,36 @@ abstract class AppLocalizations {
   /// **'Open {date} in Daily view'**
   String openDaily(String date);
 
+  /// No description provided for @openDailyBtn.
+  ///
+  /// In en, this message translates to:
+  /// **'Open day view'**
+  String get openDailyBtn;
+
+  /// No description provided for @poolView.
+  ///
+  /// In en, this message translates to:
+  /// **'Pool'**
+  String get poolView;
+
+  /// No description provided for @tableView.
+  ///
+  /// In en, this message translates to:
+  /// **'Table'**
+  String get tableView;
+
+  /// No description provided for @poolReset.
+  ///
+  /// In en, this message translates to:
+  /// **'Reset view'**
+  String get poolReset;
+
+  /// No description provided for @poolSize.
+  ///
+  /// In en, this message translates to:
+  /// **'Node size'**
+  String get poolSize;
+
   /// No description provided for @addTaskTitle.
   ///
   /// In en, this message translates to:

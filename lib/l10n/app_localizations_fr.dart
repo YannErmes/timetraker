@@ -171,6 +171,21 @@ class AppLocalizationsFr extends AppLocalizations {
   }
 
   @override
+  String get openDailyBtn => 'Ouvrir le jour';
+
+  @override
+  String get poolView => 'Pool';
+
+  @override
+  String get tableView => 'Tableau';
+
+  @override
+  String get poolReset => 'Recentrer';
+
+  @override
+  String get poolSize => 'Taille des nœuds';
+
+  @override
   String get addTaskTitle => 'Ajouter une tâche';
 
   @override
