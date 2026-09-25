@@ -1,0 +1,47 @@
+# Validates the iOS build on a free GitHub-hosted macOS runner.
+#
+# NOTE: Apple requires a paid Apple Developer account ($99/year) to sign an
+# app for real iPhones (or TestFlight). Without signing, this workflow
+# produces an UNSIGNED device build — good for proving the code compiles
+# for iOS, but it cannot be installed on a phone.
+# Once you have the developer account, add signing (certificates +
+# provisioning profile as secrets) and switch the build step to
+# `flutter build ipa` with an ExportOptions.plist.
+#
+# Secrets (same as the Windows build):
+#   SUPABASE_URL, SUPABASE_ANON_KEY
+name: Build iOS (unsigned)
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: macos-latest
+    timeout-minutes: 30
+    steps:
+      - name: Check secrets
+        shell: bash
+        run: |
+          if [ -z "${{ secrets.SUPABASE_URL }}" ] || [ -z "${{ secrets.SUPABASE_ANON_KEY }}" ]; then
+            echo "Add SUPABASE_URL and SUPABASE_ANON_KEY to repo Settings > Secrets and variables > Actions first."
+            exit 1
+          fi
+
+      - uses: actions/checkout@v4
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - run: flutter pub get
+
+      - name: Build iOS (no codesign)
+        run: flutter build ios --release --no-codesign --dart-define=SUPABASE_URL=${{ secrets.SUPABASE_URL }} --dart-define=SUPABASE_ANON_KEY=${{ secrets.SUPABASE_ANON_KEY }}
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: 4cus-ios-unsigned
+          path: build/ios/iphoneos/Runner.app
+          retention-days: 14
