@@ -4,6 +4,7 @@ import 'package:tracker_sheet/l10n/app_localizations.dart';
 import '../config/app_colors.dart';
 import '../config/ui_style.dart';
 import '../config/app_colors.dart';
+import '../config/supabase_config.dart';
 import '../providers/app_providers.dart';
 import '../providers/display_prefs.dart';
 import '../services/google_calendar_service.dart';
@@ -36,6 +37,8 @@ class _DensityDialog extends ConsumerWidget {
         width: 360,
         child: SingleChildScrollView(
           child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+            _CloudStatusRow(t),
+            const SizedBox(height: 12),
             Text(t.rowsVisibleLbl, style: TextStyle(color: AppColors.textSecondary, fontSize: 12, fontWeight: FontWeight.w600)),
             const SizedBox(height: 6),
             DropdownButtonFormField<int>(
@@ -128,6 +131,38 @@ class _DensityDialog extends ConsumerWidget {
         ),
       ),
       actions: [TextButton(onPressed: ()=> Navigator.pop(context), child: Text(t.close))],
+    );
+  }
+}
+
+class _CloudStatusRow extends StatelessWidget {
+  final AppLocalizations t;
+  const _CloudStatusRow(this.t);
+
+  @override
+  Widget build(BuildContext context) {
+    final ok = isSupabaseConfigured;
+    final color = ok ? const Color(0xFF22C55E) : const Color(0xFFF59E0B);
+    // Showing the host proves at a glance which build is running and which
+    // project it talks to, instead of guessing from a banner.
+    final host = Uri.tryParse(supabaseUrl)?.host ?? supabaseUrl;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: color.withValues(alpha: 0.45)),
+      ),
+      child: Row(children: [
+        Icon(ok ? Icons.cloud_done_rounded : Icons.cloud_off_rounded, size: 15, color: color),
+        const SizedBox(width: 8),
+        Expanded(
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text(ok ? t.cloudOkTip : t.cloudNotConfigured, style: TextStyle(fontSize: 10.5, color: color, fontWeight: FontWeight.w600)),
+            Text(host, style: TextStyle(fontSize: 9.5, color: AppColors.textSecondary), maxLines: 1, overflow: TextOverflow.ellipsis),
+          ]),
+        ),
+      ]),
     );
   }
 }
