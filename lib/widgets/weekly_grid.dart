@@ -253,6 +253,8 @@ class _WeeklyGridState extends ConsumerState<WeeklyGrid> {
     final dayWidth = toggleW + cols.fold(0.0, (s, c) => s + widthFor(c));
     // +2px slack so sub-pixel/border accumulation can never trip an overflow.
     final rightWidth = days.length * dayWidth + 2;
+    // Contrasted divider between day blocks (header mirrors the body rows).
+    final dayEdge = BorderSide(color: AppColors.textSecondary.withValues(alpha: 0.45), width: 1.5);
     final totalTableWidth = taskColWidth + rightWidth;
     final screenWidth = MediaQuery.of(context).size.width;
     final shouldCenter = totalTableWidth < screenWidth - 32;
@@ -276,12 +278,14 @@ class _WeeklyGridState extends ConsumerState<WeeklyGrid> {
                 child: Container(
               width: dayWidth,
               decoration: flash
-                  ? BoxDecoration(
-                      color: AppColors.accent.withValues(alpha: 0.14),
-                      borderRadius: BorderRadius.circular(8),
-                      border: Border.all(color: AppColors.accent.withValues(alpha: 0.55)),
-                    )
+                  ? BoxDecoration(color: AppColors.accent.withValues(alpha: 0.14), borderRadius: BorderRadius.circular(8))
                   : null,
+              // Every border goes on `foregroundDecoration`: a `decoration`
+              // border pads the child (1px/side for the today outline), which
+              // pushed this day to 414x62 and overflowed the 416-wide row.
+              foregroundDecoration: flash
+                  ? BoxDecoration(borderRadius: BorderRadius.circular(8), border: Border.all(color: AppColors.accent.withValues(alpha: 0.55)))
+                  : BoxDecoration(border: Border(right: dayEdge)),
               child: Column(children: [
               Container(
                 height: 28,
@@ -296,7 +300,9 @@ class _WeeklyGridState extends ConsumerState<WeeklyGrid> {
                       maxLines: 1),
                 ),
               ),
-              SizedBox(height: 36, child: Row(children: [
+              // Expanded instead of a fixed 36 so the label row absorbs any
+              // rounding instead of overflowing the 64px header.
+              Expanded(child: Row(children: [
                 if (toggleW > 0) const SizedBox(width: 48),
                 for (final col in cols) SizedBox(width: widthFor(col), child: Center(child: Text(col.label, style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: AppColors.textPrimary), maxLines: 1, overflow: TextOverflow.ellipsis))),
               ])),
@@ -414,7 +420,7 @@ class _WeeklyGridState extends ConsumerState<WeeklyGrid> {
 
     final bodyContent = shouldCenter ? Center(child: SizedBox(width: totalTableWidth, child: bodyRowFixed)) : bodyRowScrollable;
 
-    final body = Expanded(child: bodyContent);
+    final body = Expanded(child: RepaintBoundary(child: bodyContent));
 
     final tipContent = Container(
       margin: const EdgeInsets.all(12),
@@ -513,6 +519,17 @@ class _LeftTaskCell extends ConsumerStatefulWidget {
   ConsumerState<_LeftTaskCell> createState() => _LeftTaskCellState();
 }
 
+/// "3 min" / "2 h" / "10 d" - reminder offsets, not relative times.
+String _shortDuration(Duration d) {
+  if (d.inDays >= 1) return '${d.inDays} d';
+  if (d.inHours >= 1) return '${d.inHours} h';
+  return '${d.inMinutes} min';
+}
+
+/// Locale clock time, e.g. "9:45 PM" / "21:45".
+String _clockTime(BuildContext context, DateTime t) =>
+    MaterialLocalizations.of(context).formatTimeOfDay(TimeOfDay.fromDateTime(t));
+
 class _LeftTaskCellState extends ConsumerState<_LeftTaskCell> {
   @override
   Widget build(BuildContext context) {
@@ -531,6 +548,16 @@ class _LeftTaskCellState extends ConsumerState<_LeftTaskCell> {
     if (noteCol != null) {
       noteCount = svc.entries.where((e) => e.taskId == task.id && notePlainText(e.data[noteCol.id]).isNotEmpty).length;
     }
+    final noUpcomingDay = (task.reminder as String?)?.isNotEmpty == true && svc.nextAssignedEntry(task.id as String) == null;
+    // Same source of truth as the scheduler: spell out the time the reminder
+    // will actually fire, so "3MI" never looks like "in 3 minutes".
+    final remRaw = ((task.reminder as String?) ?? '').trim();
+    final remInfo = remRaw.isEmpty ? null : svc.nextTaskReminder(task.id as String);
+    final bellMsg = remInfo == null
+        ? loc.bellTip(remRaw.toUpperCase())
+        : remInfo.hasTime
+            ? loc.bellTipBefore(_shortDuration(remInfo.offset), _clockTime(context, remInfo.when))
+            : loc.bellTipBeforeDay(_shortDuration(remInfo.offset), formatDayHeader(remInfo.when));
     return MouseRegion(
       onEnter: (_) => widget.onHover(true),
       onExit: (_) => widget.onHover(false),
@@ -539,20 +566,24 @@ class _LeftTaskCellState extends ConsumerState<_LeftTaskCell> {
         height: 48,
         decoration: BoxDecoration(
           color: bg,
+          boxShadow: widget.hScrolled ? [BoxShadow(color: Colors.black.withValues(alpha: 0.28), blurRadius: 6, offset: const Offset(2, 0))] : null,
+        ),
+        // Painted on top so the hover outline never steals width from the
+        // name + menu row below.
+        foregroundDecoration: BoxDecoration(
           border: Border(
             bottom: hovered ? hoverSide : BorderSide(color: AppColors.border, width: 1),
             right: hovered ? hoverSide : BorderSide(color: AppColors.border),
             top: hovered ? hoverSide : BorderSide.none,
             left: hovered ? hoverSide : BorderSide.none,
           ),
-          boxShadow: widget.hScrolled ? [BoxShadow(color: Colors.black.withValues(alpha: 0.28), blurRadius: 6, offset: const Offset(2, 0))] : null,
         ),
         padding: const EdgeInsets.symmetric(horizontal: 8),
         child: Row(children: [
           Expanded(child: InkWell(onTap: widget.onRename, borderRadius: BorderRadius.circular(8), child: Padding(padding: const EdgeInsets.symmetric(vertical: 4), child: Text(task.name.isEmpty ? '—' : task.name, style: TextStyle(fontSize: 12, color: task.name.isEmpty ? AppColors.textSecondary : AppColors.textPrimary, fontWeight: FontWeight.w500), overflow: TextOverflow.ellipsis)))),
           if ((task.reminder as String?)?.isNotEmpty == true)
             Tooltip(
-              message: loc.bellTip((task.reminder as String).toUpperCase()),
+              message: bellMsg,
               child: Padding(
                 padding: const EdgeInsets.only(right: 2),
                 child: Icon(Icons.notifications_outlined, size: 13, color: AppColors.accent),
@@ -562,6 +593,21 @@ class _LeftTaskCellState extends ConsumerState<_LeftTaskCell> {
             color: AppColors.surface,
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8), side: BorderSide(color: AppColors.border)),
             itemBuilder: (_) => [
+              // A per-task reminder counts back from the next scheduled
+              // occurrence, so an unscheduled task would never fire: say so
+              // instead of failing silently.
+              if (noUpcomingDay)
+                PopupMenuItem(
+                  enabled: false,
+                  child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                    const Padding(
+                      padding: EdgeInsets.only(top: 1),
+                      child: Icon(Icons.warning_amber_rounded, size: 14, color: Color(0xFFF59E0B)),
+                    ),
+                    const SizedBox(width: 6),
+                    Expanded(child: Text(loc.reminderNoUpcomingDay, style: const TextStyle(fontSize: 10, color: Color(0xFFB45309)))),
+                  ]),
+                ),
               PopupMenuItem(value: 'notes', child: Text(noteCol == null ? loc.notesRecap : loc.notesRecapCount('$noteCount'))),
               PopupMenuItem(
                   value: 'reminder',
@@ -625,8 +671,10 @@ class _RightTaskRowState extends ConsumerState<_RightTaskRow> {
       onExit: (_) => widget.onHover(false),
       child: Container(
         height: 48,
-        decoration: BoxDecoration(
-          color: bg,
+        decoration: BoxDecoration(color: bg),
+        // Hover outline is painted on top: as a `decoration` border the 1.5px
+        // right edge would shrink the row and overflow the day cells.
+        foregroundDecoration: BoxDecoration(
           border: Border(
             bottom: hovered ? hoverSide : BorderSide(color: AppColors.border, width: 1),
             top: hovered ? hoverSide : BorderSide.none,
@@ -634,18 +682,25 @@ class _RightTaskRowState extends ConsumerState<_RightTaskRow> {
           ),
         ),
         child: Row(children: [
-          for (final d in days) ...[
+          // Stronger divider at each day boundary so days never blend together.
+          for (int di = 0; di < days.length; di++) ...[
             Builder(builder: (_) {
+              final d = days[di];
               final flash = widget.flashDayKey != null && _dateKey(d) == widget.flashDayKey;
               final flashBg = flash ? AppColors.accent.withValues(alpha: 0.12) : null;
               final sc = _statusCol;
+              final dayEdge = BorderSide(color: AppColors.textSecondary.withValues(alpha: 0.45), width: 1.5);
+              final innerEdge = BorderSide(color: AppColors.border);
               return Row(mainAxisSize: MainAxisSize.min, children: [
                 if (widget.showToggle)
                   Container(
                       width: 48,
                       height: 48,
                       alignment: Alignment.center,
-                      decoration: BoxDecoration(color: flashBg, border: Border(left: BorderSide(color: AppColors.border))),
+                      decoration: BoxDecoration(color: flashBg),
+                      // Painted over the child, so the 1.5px line never eats
+                      // into the cell width and overflows the row.
+                      foregroundDecoration: BoxDecoration(border: Border(left: dayEdge)),
                       child: Builder(builder: (_) {
                         final e = svc.entryFor(task.id, d);
                         final raw = sc == null ? null : e?.data[sc.id];
@@ -657,7 +712,15 @@ class _RightTaskRowState extends ConsumerState<_RightTaskRow> {
                         }
                         return StatusDotButton(taskId: task.id, date: d, col: sc, rawValue: raw, title: loc.editColLabel(sc.label));
                       })),
-                for (final col in cols) Container(width: _widthFor(col), height: 48, padding: EdgeInsets.symmetric(horizontal: 6, vertical: 8), decoration: BoxDecoration(color: flashBg, border: Border(left: BorderSide(color: AppColors.border))), alignment: Alignment.center, child: _Cell(taskId: task.id, date: d, col: col)),
+                for (int ci = 0; ci < cols.length; ci++)
+                  Container(
+                      width: _widthFor(cols[ci]),
+                      height: 48,
+                      padding: EdgeInsets.symmetric(horizontal: 6, vertical: 8),
+                      decoration: BoxDecoration(color: flashBg),
+                      foregroundDecoration: BoxDecoration(border: Border(left: (ci == 0 && !widget.showToggle) ? dayEdge : innerEdge)),
+                      alignment: Alignment.center,
+                      child: _Cell(taskId: task.id, date: d, col: cols[ci])),
               ]);
             }),
           ],

@@ -66,7 +66,8 @@ class _TrackerAppState extends ConsumerState<TrackerApp> {
     // forces a full subtree rebuild so every AppColors read picks up the
     // new palette (widgets read AppColors directly, not via Theme.of).
     AppColors.lightMode = prefs.lightMode;
-    AppColors.customBg = prefs.theme == 'custom' && bgBytes != null;
+    // Both Custom variants (black + white base) show the photo.
+    AppColors.customMode = prefs.isCustom && bgBytes != null;
     if (!_init) {
       return MaterialApp(
         debugShowCheckedModeBanner: false,
@@ -108,11 +109,18 @@ class _TrackerAppState extends ConsumerState<TrackerApp> {
             : AuthScreen(key: ValueKey('auth-${prefs.theme}'));
         // Custom theme: photo background + dim overlay for eye comfort,
         // page itself draws translucent frosted surfaces over it.
-        if (AppColors.customBg && bgBytes != null) {
-          final dim = ((1.0 - brightness) * 0.8).clamp(0.0, 0.85);
+        if (AppColors.customMode && bgBytes != null) {
+          // Surfaces are frosted, so the scrim only needs to take the edge off
+          // a busy photo - too much of it reads as a grey veil over the app.
+          final dim = ((1.0 - brightness) * 0.5).clamp(0.0, 0.6);
+          // Light base washes the photo out with white instead of black so
+          // dark text on the frosted panels stays readable.
+          final scrim = prefs.lightMode
+              ? Colors.white.withValues(alpha: dim * 0.8)
+              : Colors.black.withValues(alpha: dim);
           return Stack(children: [
             Positioned.fill(child: Image.memory(bgBytes, fit: BoxFit.cover)),
-            Positioned.fill(child: Container(color: Colors.black.withValues(alpha: dim))),
+            Positioned.fill(child: Container(color: scrim)),
             page,
           ]);
         }

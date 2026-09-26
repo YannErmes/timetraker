@@ -103,6 +103,23 @@ class SupabaseService {
   RealtimeChannel? _entriesCh;
   StreamSubscription? _connSub;
 
+  // ---- perf guards: realtime echoes + cache writes are trailing-edge
+  // throttled so rapid successive changes don't refetch/rewrite everything.
+  final Map<String, Timer> _rtDebounce = {};
+  Timer? _persistTimer;
+  bool _persistQueued = false;
+
+  void _schedulePersist() {
+    if (_persistQueued) return;
+    _persistQueued = true;
+    _persistTimer = Timer(const Duration(seconds: 2), () async {
+      _persistQueued = false;
+      try {
+        await _persistCache();
+      } catch (_) {}
+    });
+  }
+
   Future<void> _handleIdentityChange() async {
     // Clear old account instantly (in-memory AND on screen) so the previous
     // account's data is never visible while the new account loads from cloud.
@@ -221,7 +238,7 @@ class SupabaseService {
       }
     }
     if (changed) {
-      _persistCache();
+      _schedulePersist();
     }
   }
 
@@ -259,27 +276,32 @@ class SupabaseService {
     _unsubscribe();
     final uid = userId!;
     _tasksCh = _client!.channel('tasks-$uid')
-      ..onPostgresChanges(event: PostgresChangeEvent.all, schema: 'public', table: 'tasks', filter: PostgresChangeFilter(type: PostgresChangeFilterType.eq, column: 'user_id', value: uid), callback: (_) => _safeRefresh(_fetchTasks))
+      ..onPostgresChanges(event: PostgresChangeEvent.all, schema: 'public', table: 'tasks', filter: PostgresChangeFilter(type: PostgresChangeFilterType.eq, column: 'user_id', value: uid), callback: (_) => _safeRefresh('tasks', _fetchTasks))
       ..subscribe();
     _colsCh = _client!.channel('cols-$uid')
-      ..onPostgresChanges(event: PostgresChangeEvent.all, schema: 'public', table: 'column_definitions', filter: PostgresChangeFilter(type: PostgresChangeFilterType.eq, column: 'user_id', value: uid), callback: (_) => _safeRefresh(_fetchColumns))
+      ..onPostgresChanges(event: PostgresChangeEvent.all, schema: 'public', table: 'column_definitions', filter: PostgresChangeFilter(type: PostgresChangeFilterType.eq, column: 'user_id', value: uid), callback: (_) => _safeRefresh('cols', _fetchColumns))
       ..subscribe();
     _entriesCh = _client!.channel('entries-$uid')
-      ..onPostgresChanges(event: PostgresChangeEvent.all, schema: 'public', table: 'day_entries', filter: PostgresChangeFilter(type: PostgresChangeFilterType.eq, column: 'user_id', value: uid), callback: (_) => _safeRefresh(_fetchEntries))
+      ..onPostgresChanges(event: PostgresChangeEvent.all, schema: 'public', table: 'day_entries', filter: PostgresChangeFilter(type: PostgresChangeFilterType.eq, column: 'user_id', value: uid), callback: (_) => _safeRefresh('entries', _fetchEntries))
       ..subscribe();
   }
 
   /// Realtime-triggered refresh that never throws and keeps status honest.
-  void _safeRefresh(Future<void> Function() fn) {
-    fn().then((_) {
-      if (isConfigured && syncStatus.value != SyncStatus.loading) {
-        _setStatus(SyncStatus.cloud);
-      }
-    }).catchError((e) {
-      debugPrint('realtime refresh failed: $e');
-      if (isConfigured && syncStatus.value == SyncStatus.cloud) {
-        _setStatus(SyncStatus.offlineCache, 'Lost connection to the cloud — showing last saved data.');
-      }
+  /// Trailing-edge debounced: bursts of postgres notifications (including
+  /// echoes of our own writes) collapse into a single refresh.
+  void _safeRefresh(String key, Future<void> Function() fn) {
+    _rtDebounce[key]?.cancel();
+    _rtDebounce[key] = Timer(const Duration(milliseconds: 600), () {
+      fn().then((_) {
+        if (isConfigured && syncStatus.value != SyncStatus.loading) {
+          _setStatus(SyncStatus.cloud);
+        }
+      }).catchError((e) {
+        debugPrint('realtime refresh failed: $e');
+        if (isConfigured && syncStatus.value == SyncStatus.cloud) {
+          _setStatus(SyncStatus.offlineCache, 'Lost connection to the cloud — showing last saved data.');
+        }
+      });
     });
   }
 
@@ -298,7 +320,7 @@ class SupabaseService {
     await _fetchEntries();
     _ensureDefaultStatusForAll();
     _entriesCtrl.add(_entries);
-    await _persistCache();
+    _schedulePersist();
     refreshTaskReminders();
   }
 
@@ -307,7 +329,7 @@ class SupabaseService {
     final res = await _client!.from('tasks').select().eq('user_id', userId!).order('position');
     _tasks = (res as List).map((j) => Task.fromSupabase(Map<String, dynamic>.from(j))).toList();
     _tasksCtrl.add(_tasks);
-    await _persistCache();
+    _schedulePersist();
   }
 
   Future<void> _fetchColumns() async {
@@ -360,7 +382,7 @@ class SupabaseService {
     }
     _columns.sort((a, b) => a.position.compareTo(b.position));
     _colsCtrl.add(_columns);
-    await _persistCache();
+    _schedulePersist();
   }
 
   Future<void> _fetchEntries() async {
@@ -369,7 +391,7 @@ class SupabaseService {
     _entries = (res as List).map((j) => DayEntry.fromSupabase(Map<String, dynamic>.from(j))).toList();
     _ensureDefaultStatusForAll();
     _entriesCtrl.add(_entries);
-    await _persistCache();
+    _schedulePersist();
   }
 
   // Tasks CRUD — instant write + queue on failure
@@ -670,6 +692,44 @@ class SupabaseService {
     return (e.data[statusCol.id] as String?) != 'idle';
   }
 
+  /// Next day (today or later) where [taskId] is assigned, or null when the
+  /// task is not scheduled anywhere ahead. A per-task reminder counts back
+  /// from that occurrence, so with null there is nothing to fire against.
+  DayEntry? nextAssignedEntry(String taskId) {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    DayEntry? best;
+    for (final e in _entries) {
+      if (e.taskId != taskId || !isAssigned(e) || e.date.isBefore(today)) continue;
+      if (best == null || e.date.isBefore(best.date)) best = e;
+    }
+    return best;
+  }
+
+  /// When a per-task reminder will next fire for [taskId], plus the offset it
+  /// was set with. Mirrors [_reminderJobs] exactly (same iteration, same
+  /// occurrence rule) so a tooltip can never promise a time the scheduler
+  /// will not use. Null when the task has no reminder or no upcoming
+  /// occurrence left to count back from.
+  ({DateTime when, Duration offset, bool hasTime})? nextTaskReminder(String taskId) {
+    final t = _tasks.where((x) => x.id == taskId).firstOrNull;
+    if (t == null) return null;
+    final offset = Task.parseReminder((t.reminder ?? '').trim());
+    if (offset == null) return null;
+    final schedCol = _columns.where((c) => c.id == 'col_schedule' || c.type == ColumnType.schedule).firstOrNull;
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final upcoming = _entries
+        .where((e) => e.taskId == taskId && isAssigned(e) && !e.date.isBefore(today))
+        .toList()
+      ..sort((a, b) => a.date.compareTo(b.date));
+    for (final e in upcoming) {
+      final occ = _occurrenceAt(e.date, schedCol == null ? null : e.data[schedCol.id] as String?);
+      if (occ.when.isAfter(now)) return (when: occ.when, offset: offset, hasTime: occ.hasTime);
+    }
+    return null;
+  }
+
   Future<void> toggleChecked(String taskId, DateTime date, bool value) async {
     if (userId == null) return;
     final statusCol = _columns.where((c) => c.type == ColumnType.status).firstOrNull;
@@ -747,13 +807,27 @@ class SupabaseService {
           .where((e) => e.taskId == t.id && isAssigned(e) && !e.date.isBefore(today))
           .toList()
         ..sort((a, b) => a.date.compareTo(b.date));
+      // Queue the next TWO occurrences: once the first one has fired there is
+      // already a follow-up waiting, so a recurring task keeps reminding you
+      // without needing another edit to re-arm it.
+      var added = 0;
       for (final e in upcoming) {
-        final when = _occurrenceAt(e.date, schedCol == null ? null : e.data[schedCol.id] as String?);
-        final fireAt = when.subtract(offset);
-        if (fireAt.isAfter(now)) {
-          jobs.add(TaskReminderJob(taskId: t.id, taskName: _fallbackTaskName(t.name), fireAt: fireAt, label: raw.toUpperCase()));
-          break;
-        }
+        final occ = _occurrenceAt(e.date, schedCol == null ? null : e.data[schedCol.id] as String?);
+        if (!occ.when.isAfter(now)) continue; // occurrence already started
+        final intended = occ.when.subtract(offset);
+        // A reminder set after its moment (e.g. "2 days before" on a task
+        // happening tomorrow) still notifies once, right away - deduped
+        // against the intended moment so it cannot repeat on every refresh.
+        final fireAt = intended.isAfter(now) ? intended : now;
+        jobs.add(TaskReminderJob(
+          taskId: t.id,
+          occKey: '${t.id}@${e.dateKey}',
+          taskName: _fallbackTaskName(t.name),
+          fireAt: fireAt,
+          dedupeAt: intended,
+          label: raw.toUpperCase(),
+        ));
+        if (++added >= 2) break;
       }
     }
     // Reminder-column cells: dated messages with their own fire time.
@@ -768,6 +842,7 @@ class SupabaseService {
         final t = _tasks.where((tt) => tt.id == e.taskId).firstOrNull;
         jobs.add(TaskReminderJob(
           taskId: '${e.taskId}:${e.dateKey}:${c.id}',
+          occKey: '${e.id}:${c.id}',
           taskName: _fallbackTaskName(t?.name),
           fireAt: fireAt,
           label: 'reminder',
@@ -840,14 +915,19 @@ class SupabaseService {
     refreshTaskReminders();
   }
 
-  DateTime _occurrenceAt(DateTime date, String? hhmm) {
-    int h = 9, m = 0;
-    if (hhmm != null && hhmm.contains(':')) {
-      final parts = hhmm.split(':');
-      h = int.tryParse(parts[0]) ?? 9;
-      if (parts.length > 1) m = int.tryParse(parts[1].substring(0, 2)) ?? 0;
-    }
-    return DateTime(date.year, date.month, date.day, h, m);
+  /// The moment an occurrence starts. A day with no time set counts from
+  /// midnight - never from a made-up 09:00, which produced alerts that
+  /// looked hours away from the task they belonged to.
+  ({DateTime when, bool hasTime}) _occurrenceAt(DateTime date, String? hhmm) {
+    final midnight = DateTime(date.year, date.month, date.day);
+    if (hhmm == null || !hhmm.contains(':')) return (when: midnight, hasTime: false);
+    final parts = hhmm.split(':');
+    final h = int.tryParse(parts[0].trim());
+    if (h == null || h < 0 || h > 23) return (when: midnight, hasTime: false);
+    final rawM = parts.length > 1 ? parts[1].trim() : '0';
+    final m = int.tryParse(rawM.length > 2 ? rawM.substring(0, 2) : rawM);
+    if (m == null || m < 0 || m > 59) return (when: midnight, hasTime: false);
+    return (when: DateTime(date.year, date.month, date.day, h, m), hasTime: true);
   }
 
   Future<void> _autoSyncStatus(String taskId, DateTime date) async {
@@ -877,12 +957,38 @@ class SupabaseService {
   }
 
   Timer? _statusTicker;
+  AppNotificationSettings? _notifCache;
+  DateTime? _notifCacheAt;
+
+  /// Cached notification settings (15s TTL) so the ticker doesn't hit
+  /// SharedPreferences on every round.
+  Future<AppNotificationSettings> _notifSettings() async {
+    final now = DateTime.now();
+    if (_notifCache != null && _notifCacheAt != null && now.difference(_notifCacheAt!).inSeconds < 15) {
+      return _notifCache!;
+    }
+    _notifCache = await NotificationService.instance.getSettings();
+    _notifCacheAt = now;
+    return _notifCache!;
+  }
+
   void _startStatusTicker() {
     _statusTicker?.cancel();
-    _statusTicker = Timer.periodic(const Duration(seconds: 1), (_) async {
+    // 5s cadence is plenty for auto-complete/status flips (live countdowns
+    // render in their own cells). Skips entirely when nothing is running.
+    _statusTicker = Timer.periodic(const Duration(seconds: 5), (_) async {
       final statusCol = _columns.where((c) => c.type == ColumnType.status).firstOrNull;
       final timerCol = _columns.where((c) => c.type == ColumnType.timer).firstOrNull;
       if (statusCol == null || timerCol == null) return;
+      bool anyRunning = false;
+      for (final e in _entries) {
+        final tv = TimerValue.tryParse(e.data[timerCol.id]);
+        if (tv != null && tv.running) {
+          anyRunning = true;
+          break;
+        }
+      }
+      if (!anyRunning) return;
       final now = DateTime.now();
       for (final e in List<DayEntry>.from(_entries)) {
         final raw = e.data[timerCol.id];
@@ -913,7 +1019,7 @@ class SupabaseService {
             await upsertEntry(e.withValue(statusCol.id, 'in_progress').copyWith(checked: true));
           }
           // schedule reminder if enabled (only once per start)
-          final settings = await NotificationService.instance.getSettings();
+          final settings = await _notifSettings();
           if (settings.enabled && settings.timerReminder) {
             final remaining = tv.durationSec - tv.effectiveElapsed(now);
             final mins = settings.reminderMinutes;
@@ -1047,6 +1153,11 @@ class SupabaseService {
 
   void dispose() {
     _statusTicker?.cancel();
+    _persistTimer?.cancel();
+    for (final t in _rtDebounce.values) {
+      t.cancel();
+    }
+    _rtDebounce.clear();
     syncStatus.dispose();
     _tasksCtrl.close();
     _colsCtrl.close();

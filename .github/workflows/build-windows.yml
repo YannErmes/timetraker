@@ -9,6 +9,9 @@
 name: Build Windows EXE
 
 on:
+  push:
+    tags:
+      - 'v*'
   workflow_dispatch: # manual run from the Actions tab
 
 jobs:

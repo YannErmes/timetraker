@@ -15,10 +15,11 @@ class DisplayPrefs {
   final int rowsVisible; // 0 = all
   final int daysVisible; // 0 = all (7)
   final bool basicCells; // true = compact icon-only timer/status cells
-  final String theme; // dark | light | custom
+  final String theme; // dark | light | custom (black base) | custom_light (white base)
   // First-install defaults: light theme + Basic layout.
   const DisplayPrefs({this.rowsVisible = 0, this.daysVisible = 0, this.basicCells = true, this.theme = 'light'});
-  bool get lightMode => theme == 'light';
+  bool get lightMode => theme == 'light' || theme == 'custom_light';
+  bool get isCustom => theme == 'custom' || theme == 'custom_light';
   DisplayPrefs copyWith({int? rowsVisible, int? daysVisible, bool? basicCells, String? theme}) =>
       DisplayPrefs(rowsVisible: rowsVisible ?? this.rowsVisible, daysVisible: daysVisible ?? this.daysVisible, basicCells: basicCells ?? this.basicCells, theme: theme ?? this.theme);
   Map<String, dynamic> toJson() => {'rowsVisible': rowsVisible, 'daysVisible': daysVisible, 'basicCells': basicCells, 'theme': theme};
@@ -30,7 +31,7 @@ class DisplayPrefs {
     } else if (j['lightMode'] is bool) {
       theme = (j['lightMode'] as bool) ? 'light' : 'dark';
     }
-    if (theme != 'dark' && theme != 'light' && theme != 'custom') theme = 'light';
+    if (theme != 'dark' && theme != 'light' && theme != 'custom' && theme != 'custom_light') theme = 'light';
     return DisplayPrefs(
       rowsVisible: (j['rowsVisible'] as num?)?.toInt() ?? 0,
       daysVisible: (j['daysVisible'] as num?)?.toInt() ?? 0,
@@ -85,7 +86,7 @@ class DisplayPrefsNotifier extends StateNotifier<DisplayPrefs> {
   }
 
   Future<void> setTheme(String v) async {
-    if (v != 'dark' && v != 'light' && v != 'custom') return;
+    if (v != 'dark' && v != 'light' && v != 'custom' && v != 'custom_light') return;
     state = state.copyWith(theme: v);
     await _save();
   }

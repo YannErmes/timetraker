@@ -665,8 +665,21 @@ class AppLocalizationsEn extends AppLocalizations {
   String get setReminderItem => 'Set reminder';
 
   @override
+  String get reminderNoUpcomingDay => 'Not scheduled on any upcoming day, so this reminder will not fire.';
+
+  @override
   String bellTip(String r) {
     return 'Reminder: $r';
+  }
+
+  @override
+  String bellTipBefore(String offset, String time) {
+    return 'Reminder: $offset before $time';
+  }
+
+  @override
+  String bellTipBeforeDay(String offset, String day) {
+    return 'Reminder: $offset before $day starts (no time set on that day)';
   }
 
   @override
@@ -933,7 +946,24 @@ class AppLocalizationsEn extends AppLocalizations {
   String get notifTitle => 'Notifications';
 
   @override
-  String get notifHelp => 'Alerts for timer done, daily tasks, and timer reminders — works on Android and web (when tab is open).';
+  String get notifHelp => 'Alerts for timer done, daily tasks, and task reminders — on Android, Windows and the web (while the app is open).';
+
+  @override
+  String get notifEnableBtn => 'Enable notifications';
+
+  @override
+  String get notifPermOk => 'Notifications are on.';
+
+  @override
+  String get notifPermBlocked => 'Blocked. Allow notifications for this site in your browser settings, then tap again.';
+
+  @override
+  String get notifTestBtn => 'Test notification';
+
+  @override
+  String notifNextIn(String time, String rel) {
+    return 'Next alert $time · in $rel';
+  }
 
   @override
   String get timerDoneTitle => 'Timer done';
@@ -1050,6 +1080,12 @@ class AppLocalizationsEn extends AppLocalizations {
   String get customBtn => 'Custom';
 
   @override
+  String get customDarkBase => 'Black base';
+
+  @override
+  String get customLightBase => 'White base';
+
+  @override
   String get switchCustom => 'Switch to custom theme';
 
   @override
@@ -1063,6 +1099,12 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get brightnessLbl => 'Background brightness';
+
+  @override
+  String get customSavedOk => 'Background image saved on this device.';
+
+  @override
+  String get customSavedFail => 'Image applied for this session only — this device would not store it.';
 
   @override
   String get columnVisibilityHelp => 'Column visibility is saved per user. Hide schedule/time/status/note to focus the table — e.g., show only status or only time.';

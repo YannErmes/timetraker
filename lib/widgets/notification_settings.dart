@@ -15,6 +15,9 @@ class _NotificationSettingsSectionState extends ConsumerState<NotificationSettin
   AppNotificationSettings _s = const AppNotificationSettings();
   bool _loading = true;
   bool _testingDaily = false;
+  bool _testing = false;
+  String _perm = 'unknown';
+  DateTime? _next;
 
   @override
   void initState() {
@@ -25,12 +28,51 @@ class _NotificationSettingsSectionState extends ConsumerState<NotificationSettin
   Future<void> _load() async {
     final s = await NotificationService.instance.getSettings();
     await NotificationService.instance.init();
-    if (mounted) setState(() { _s = s; _loading = false; });
+    if (!mounted) return;
+    setState(() {
+      _s = s;
+      _loading = false;
+      _perm = NotificationService.instance.permissionStatus;
+      _next = NotificationService.instance.nextFireAt;
+    });
   }
 
   Future<void> _save(AppNotificationSettings s) async {
     setState(() => _s = s);
     await NotificationService.instance.saveSettings(s);
+    if (mounted) setState(() => _next = NotificationService.instance.nextFireAt);
+  }
+
+  /// Web needs a user gesture for the permission prompt, and any platform
+  /// can report back whether the alert actually went out.
+  Future<void> _enable() async {
+    final t = AppLocalizations.of(context)!;
+    final r = await NotificationService.instance.requestPermission();
+    final res = await NotificationService.instance.showTest(title: t.notifTitle, body: t.notifPermOk);
+    if (!mounted) return;
+    setState(() {
+      _perm = r;
+      _next = NotificationService.instance.nextFireAt;
+    });
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+      content: Text(res == 'sent' ? t.notifPermOk : t.notifPermBlocked),
+      behavior: SnackBarBehavior.floating,
+    ));
+  }
+
+  Future<void> _test() async {
+    final t = AppLocalizations.of(context)!;
+    setState(() => _testing = true);
+    try {
+      final res = await NotificationService.instance.showTest(title: t.notifTitle, body: t.notifPermOk);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text(res == 'sent' ? t.notifPermOk : t.notifPermBlocked),
+        behavior: SnackBarBehavior.floating,
+      ));
+    } finally {
+      if (mounted) setState(() => _testing = false);
+    }
   }
 
   TimeOfDay _parseTime(String hhmm) {
@@ -74,6 +116,24 @@ class _NotificationSettingsSectionState extends ConsumerState<NotificationSettin
       ]),
       const SizedBox(height: 4),
       Text(t.notifHelp, style: TextStyle(fontSize: 10, color: AppColors.textSecondary)),
+      const SizedBox(height: 8),
+      Row(children: [
+        _permBadge(t, _perm),
+        const SizedBox(width: 8),
+        Expanded(
+          child: Text(
+            _next == null ? '' : t.notifNextIn(_clock(_next!), _rel(_next!)),
+            style: TextStyle(fontSize: 10, color: AppColors.textSecondary),
+            overflow: TextOverflow.ellipsis,
+          ),
+        ),
+        OutlinedButton.icon(
+          icon: _testing ? const SizedBox(width: 12, height: 12, child: CircularProgressIndicator(strokeWidth: 2)) : const Icon(Icons.notifications_active_outlined, size: 14),
+          label: Text(_perm == 'granted' ? t.notifTestBtn : t.notifEnableBtn, style: const TextStyle(fontSize: 11)),
+          onPressed: _testing ? null : (_perm == 'granted' ? _test : _enable),
+          style: OutlinedButton.styleFrom(padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6), minimumSize: Size.zero, tapTargetSize: MaterialTapTargetSize.shrinkWrap),
+        ),
+      ]),
       const SizedBox(height: 12),
       _tile(
         icon: Icons.hourglass_bottom_rounded,
@@ -141,6 +201,51 @@ class _NotificationSettingsSectionState extends ConsumerState<NotificationSettin
             : null,
       ),
     ]);
+  }
+
+  Widget _permBadge(AppLocalizations t, String perm) {
+    final ok = perm == 'granted';
+    final color = ok ? const Color(0xFF22C55E) : AppColors.textSecondary;
+    final label = ok ? t.notifPermOk : t.notifPermBlocked;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.14),
+        borderRadius: BorderRadius.circular(6),
+        border: Border.all(color: color.withValues(alpha: 0.5)),
+      ),
+      child: Row(mainAxisSize: MainAxisSize.min, children: [
+        Icon(ok ? Icons.check_circle : Icons.info_outline, size: 11, color: color),
+        const SizedBox(width: 4),
+        ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 90),
+          child: Text(label, style: TextStyle(fontSize: 9.5, color: color), maxLines: 1, overflow: TextOverflow.ellipsis),
+        ),
+      ]),
+    );
+  }
+
+  /// "in 2 days" / "in 3 h" / "in 12 min"
+  String _rel(DateTime when) {
+    final d = when.difference(DateTime.now());
+    if (d.isNegative) return '0 min';
+    if (d.inDays >= 1) return '${d.inDays} d';
+    if (d.inHours >= 1) return '${d.inHours} h';
+    return '${d.inMinutes.clamp(1, 59)} min';
+  }
+
+  /// "9:42 PM" today, "Sun 9:42 PM" otherwise - the absolute time is what
+  /// makes a "3 min before the task" reminder click.
+  String _clock(DateTime when) {
+    final now = DateTime.now();
+    final time = MaterialLocalizations.of(context).formatTimeOfDay(TimeOfDay.fromDateTime(when));
+    final sameDay = now.year == when.year && now.month == when.month && now.day == when.day;
+    final tomorrow = now.add(const Duration(days: 1));
+    if (sameDay) return time;
+    if (tomorrow.year == when.year && tomorrow.month == when.month && tomorrow.day == when.day) {
+      return '${MaterialLocalizations.of(context).formatDecimal(tomorrow.weekday)} $time';
+    }
+    return '${when.day}/${when.month} $time';
   }
 
   Widget _tile({required IconData icon, required String title, required String subtitle, required bool value, required bool enabled, required ValueChanged<bool> onChanged, Widget? trailing}) {

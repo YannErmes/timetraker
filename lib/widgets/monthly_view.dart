@@ -111,7 +111,8 @@ class _MonthlyViewState extends ConsumerState<MonthlyView> {
         ),
         Divider(height: 1, color: AppColors.border),
         Expanded(
-          child: GridView.builder(
+          child: RepaintBoundary(
+            child: GridView.builder(
             padding: const EdgeInsets.all(8),
             gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(crossAxisCount: 7, childAspectRatio: 0.92, crossAxisSpacing: 6, mainAxisSpacing: 6),
             itemCount: days.length,
@@ -220,6 +221,7 @@ class _MonthlyViewState extends ConsumerState<MonthlyView> {
                 ),
               );
             },
+          ),
           ),
         ),
       ]),

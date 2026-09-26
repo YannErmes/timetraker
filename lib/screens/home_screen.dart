@@ -82,7 +82,13 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         actions: [
           Builder(builder: (ctx) {
             final theme = ref.watch(displayPrefsProvider).theme;
-            final next = theme == 'dark' ? 'light' : theme == 'light' ? 'custom' : 'dark';
+            final next = theme == 'dark'
+                ? 'light'
+                : theme == 'light'
+                    ? 'custom'
+                    : theme == 'custom'
+                        ? 'custom_light'
+                        : 'dark';
             return IconButton(
               icon: Icon(
                   theme == 'dark'

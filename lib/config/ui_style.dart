@@ -45,6 +45,14 @@ class CustomBg {
   static const brightnessKey = 'custom_bg_brightness';
   static const defaultBrightness = 0.55;
 
+  /// Browsers cap localStorage per origin (~5 MB) and a base64 JPEG easily
+  /// doubles the payload, so we keep the encoded string well under 2.8 MB.
+  static const maxBase64Chars = 2800000;
+
+  /// Last known good bytes: keeps the theme working for this session even if
+  /// the device refuses to persist the payload.
+  static Uint8List? _cache;
+
   /// Let the user pick an image (PC file dialog / mobile gallery),
   /// downscaled so it stays small enough for local storage.
   static Future<Uint8List?> pick() async {
@@ -52,23 +60,28 @@ class CustomBg {
       final picked = await ImagePicker().pickImage(source: ImageSource.gallery);
       if (picked == null) return null;
       final raw = await picked.readAsBytes();
-      return downscale(raw);
-    } catch (_) {
+      return compress(raw);
+    } catch (e) {
+      debugPrint('custom bg pick failed: $e');
       return null;
     }
   }
 
-  /// Downscale to a max width and re-encode as JPEG so it stays small
-  /// enough for local storage on any device.
-  static Future<Uint8List?> downscale(Uint8List bytes, {int maxWidth = 1600}) async {
+  /// Re-encode to JPEG, shrinking quality/size in steps until the base64
+  /// payload is small enough for local storage on any platform.
+  static Uint8List? compress(Uint8List bytes) {
     try {
       final decoded = img.decodeImage(bytes);
       if (decoded == null) return null;
-      final resized = decoded.width > maxWidth ? img.copyResize(decoded, width: maxWidth) : decoded;
-      final out = img.encodeJpg(resized, quality: 75);
-      if (out.isEmpty) return null;
-      return Uint8List.fromList(out);
-    } catch (_) {
+      for (final step in const [(1600, 78), (1440, 70), (1200, 60), (1000, 50), (800, 42)]) {
+        final resized = decoded.width > step.$1 ? img.copyResize(decoded, width: step.$1) : decoded;
+        final out = img.encodeJpg(resized, quality: step.$2);
+        if (out.isEmpty) continue;
+        if (base64Encode(out).length <= maxBase64Chars) return Uint8List.fromList(out);
+      }
+      return null;
+    } catch (e) {
+      debugPrint('custom bg compress failed: $e');
       return null;
     }
   }
@@ -77,21 +90,43 @@ class CustomBg {
     try {
       final s = (await SharedPreferences.getInstance()).getString(imageKey);
       if (s == null || s.isEmpty) return null;
-      return base64Decode(s);
-    } catch (_) {
-      return null;
+      final bytes = base64Decode(s);
+      _cache = bytes;
+      return bytes;
+    } catch (e) {
+      debugPrint('custom bg load failed: $e');
+      return _cache;
     }
   }
 
-  static Future<void> save(Uint8List bytes) async {
+  /// Persist the image. Returns false when the device rejected the write
+  /// (e.g. storage quota) so the caller can tell the user.
+  static Future<bool> save(Uint8List bytes) async {
+    _cache = bytes;
+    final encoded = base64Encode(bytes);
     try {
-      (await SharedPreferences.getInstance()).setString(imageKey, base64Encode(bytes));
-    } catch (_) {}
+      final prefs = await SharedPreferences.getInstance();
+      final ok = await prefs.setString(imageKey, encoded);
+      if (!ok) {
+        debugPrint('custom bg save rejected (${encoded.length} chars)');
+        return false;
+      }
+      // Read back: a silent no-op write is worse than an explicit failure.
+      if ((prefs.getString(imageKey) ?? '').length != encoded.length) {
+        debugPrint('custom bg save did not persist');
+        return false;
+      }
+      return true;
+    } catch (e) {
+      debugPrint('custom bg save failed: $e');
+      return false;
+    }
   }
 
   static Future<void> clear() async {
+    _cache = null;
     try {
-      (await SharedPreferences.getInstance()).remove(imageKey);
+      await (await SharedPreferences.getInstance()).remove(imageKey);
     } catch (_) {}
   }
 

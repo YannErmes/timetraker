@@ -90,11 +90,23 @@ class _DensityDialog extends ConsumerWidget {
                 ButtonSegment(value: 'light', label: Text(t.lightBtn), icon: Icon(Icons.light_mode_outlined, size: 14)),
                 ButtonSegment(value: 'custom', label: Text(t.customBtn), icon: Icon(Icons.image_outlined, size: 14)),
               ],
-              selected: {prefs.theme},
-              onSelectionChanged: (s) => ref.read(displayPrefsProvider.notifier).setTheme(s.first),
+              selected: {prefs.isCustom ? 'custom' : prefs.theme},
+              onSelectionChanged: (s) => ref.read(displayPrefsProvider.notifier).setTheme(s.first == 'custom' && !prefs.isCustom ? 'custom' : s.first),
               style: const ButtonStyle(visualDensity: VisualDensity.compact),
             ),
-            if (prefs.theme == 'custom') ...[
+            if (prefs.isCustom) ...[
+              const SizedBox(height: 8),
+              SegmentedButton<String>(
+                segments: [
+                  ButtonSegment(value: 'custom', label: Text(t.customDarkBase), icon: Icon(Icons.contrast_rounded, size: 14)),
+                  ButtonSegment(value: 'custom_light', label: Text(t.customLightBase), icon: Icon(Icons.contrast_outlined, size: 14)),
+                ],
+                selected: {prefs.theme == 'custom_light' ? 'custom_light' : 'custom'},
+                onSelectionChanged: (s) => ref.read(displayPrefsProvider.notifier).setTheme(s.first),
+                style: const ButtonStyle(visualDensity: VisualDensity.compact),
+              ),
+            ],
+            if (prefs.isCustom) ...[
               const SizedBox(height: 8),
               const _CustomBgSection(),
             ],
@@ -133,10 +145,20 @@ class _CustomBgSectionState extends ConsumerState<_CustomBgSection> {
     setState(() => _picking = true);
     try {
       final bytes = await CustomBg.pick();
-      if (bytes != null) {
-        await CustomBg.save(bytes);
-        ref.read(customBgBytesProvider.notifier).state = bytes;
+      if (bytes == null) return;
+      final persisted = await CustomBg.save(bytes);
+      ref.read(customBgBytesProvider.notifier).state = bytes;
+      // Picking an image from a plain theme would look like nothing happened,
+      // so switch to a Custom base right away.
+      if (!ref.read(displayPrefsProvider).isCustom) {
+        await ref.read(displayPrefsProvider.notifier).setTheme('custom');
       }
+      if (!mounted) return;
+      final t = AppLocalizations.of(context)!;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text(persisted ? t.customSavedOk : t.customSavedFail),
+        behavior: SnackBarBehavior.floating,
+      ));
     } finally {
       if (mounted) setState(() => _picking = false);
     }

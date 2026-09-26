@@ -13,6 +13,9 @@
 name: Build iOS (unsigned)
 
 on:
+  push:
+    tags:
+      - 'v*'
   workflow_dispatch:
 
 jobs:

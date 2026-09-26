@@ -665,8 +665,21 @@ class AppLocalizationsFr extends AppLocalizations {
   String get setReminderItem => 'Définir un rappel';
 
   @override
+  String get reminderNoUpcomingDay => 'Non planifiée sur un jour à venir, ce rappel ne se déclenchera pas.';
+
+  @override
   String bellTip(String r) {
     return 'Rappel : $r';
+  }
+
+  @override
+  String bellTipBefore(String offset, String time) {
+    return 'Rappel : $offset avant $time';
+  }
+
+  @override
+  String bellTipBeforeDay(String offset, String day) {
+    return 'Rappel : $offset avant le début de $day (aucune heure ce jour-là)';
   }
 
   @override
@@ -933,7 +946,24 @@ class AppLocalizationsFr extends AppLocalizations {
   String get notifTitle => 'Notifications';
 
   @override
-  String get notifHelp => 'Alertes de minuteur, tâches du jour et rappels — sur Android et le web (onglet ouvert).';
+  String get notifHelp => 'Alertes de minuteur, tâches du jour et rappels — sur Android, Windows et le web (application ouverte).';
+
+  @override
+  String get notifEnableBtn => 'Activer les notifications';
+
+  @override
+  String get notifPermOk => 'Les notifications sont activées.';
+
+  @override
+  String get notifPermBlocked => 'Bloquées. Autorisez les notifications pour ce site dans votre navigateur, puis réessayez.';
+
+  @override
+  String get notifTestBtn => 'Notification test';
+
+  @override
+  String notifNextIn(String time, String rel) {
+    return 'Prochaine alerte $time · dans $rel';
+  }
 
   @override
   String get timerDoneTitle => 'Minuteur terminé';
@@ -1050,6 +1080,12 @@ class AppLocalizationsFr extends AppLocalizations {
   String get customBtn => 'Perso';
 
   @override
+  String get customDarkBase => 'Fond sombre';
+
+  @override
+  String get customLightBase => 'Fond clair';
+
+  @override
   String get switchCustom => 'Passer au thème personnalisé';
 
   @override
@@ -1063,6 +1099,12 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get brightnessLbl => 'Luminosité du fond';
+
+  @override
+  String get customSavedOk => 'Image de fond enregistrée sur cet appareil.';
+
+  @override
+  String get customSavedFail => 'Image appliquée pour cette session seulement — cet appareil refuse de la conserver.';
 
   @override
   String get columnVisibilityHelp => 'La visibilité est enregistrée par utilisateur. Masquez horaire/durée/statut/note pour vous concentrer — p. ex. statut seul.';

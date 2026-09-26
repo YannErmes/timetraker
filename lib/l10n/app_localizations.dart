@@ -1307,11 +1307,29 @@ abstract class AppLocalizations {
   /// **'Set reminder'**
   String get setReminderItem;
 
+  /// No description provided for @reminderNoUpcomingDay.
+  ///
+  /// In en, this message translates to:
+  /// **'Not scheduled on any upcoming day, so this reminder will not fire.'**
+  String get reminderNoUpcomingDay;
+
   /// No description provided for @bellTip.
   ///
   /// In en, this message translates to:
   /// **'Reminder: {r}'**
   String bellTip(String r);
+
+  /// No description provided for @bellTipBefore.
+  ///
+  /// In en, this message translates to:
+  /// **'Reminder: {offset} before {time}'**
+  String bellTipBefore(String offset, String time);
+
+  /// No description provided for @bellTipBeforeDay.
+  ///
+  /// In en, this message translates to:
+  /// **'Reminder: {offset} before {day} starts (no time set on that day)'**
+  String bellTipBeforeDay(String offset, String day);
 
   /// No description provided for @openTooltip.
   ///
@@ -1790,8 +1808,38 @@ abstract class AppLocalizations {
   /// No description provided for @notifHelp.
   ///
   /// In en, this message translates to:
-  /// **'Alerts for timer done, daily tasks, and timer reminders — works on Android and web (when tab is open).'**
+  /// **'Alerts for timer done, daily tasks, and task reminders — on Android, Windows and the web (while the app is open).'**
   String get notifHelp;
+
+  /// No description provided for @notifEnableBtn.
+  ///
+  /// In en, this message translates to:
+  /// **'Enable notifications'**
+  String get notifEnableBtn;
+
+  /// No description provided for @notifPermOk.
+  ///
+  /// In en, this message translates to:
+  /// **'Notifications are on.'**
+  String get notifPermOk;
+
+  /// No description provided for @notifPermBlocked.
+  ///
+  /// In en, this message translates to:
+  /// **'Blocked. Allow notifications for this site in your browser settings, then tap again.'**
+  String get notifPermBlocked;
+
+  /// No description provided for @notifTestBtn.
+  ///
+  /// In en, this message translates to:
+  /// **'Test notification'**
+  String get notifTestBtn;
+
+  /// No description provided for @notifNextIn.
+  ///
+  /// In en, this message translates to:
+  /// **'Next alert {time} · in {rel}'**
+  String notifNextIn(String time, String rel);
 
   /// No description provided for @timerDoneTitle.
   ///
@@ -1997,6 +2045,18 @@ abstract class AppLocalizations {
   /// **'Custom'**
   String get customBtn;
 
+  /// No description provided for @customDarkBase.
+  ///
+  /// In en, this message translates to:
+  /// **'Black base'**
+  String get customDarkBase;
+
+  /// No description provided for @customLightBase.
+  ///
+  /// In en, this message translates to:
+  /// **'White base'**
+  String get customLightBase;
+
   /// No description provided for @switchCustom.
   ///
   /// In en, this message translates to:
@@ -2026,6 +2086,18 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Background brightness'**
   String get brightnessLbl;
+
+  /// No description provided for @customSavedOk.
+  ///
+  /// In en, this message translates to:
+  /// **'Background image saved on this device.'**
+  String get customSavedOk;
+
+  /// No description provided for @customSavedFail.
+  ///
+  /// In en, this message translates to:
+  /// **'Image applied for this session only — this device would not store it.'**
+  String get customSavedFail;
 
   /// No description provided for @columnVisibilityHelp.
   ///
