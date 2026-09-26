@@ -251,7 +251,8 @@ class _WeeklyGridState extends ConsumerState<WeeklyGrid> {
     double widthFor(ColumnDefinition col) =>
         (basic && (col.type == ColumnType.timer || col.type == ColumnType.status)) ? basicColWidth : fullColWidth;
     final dayWidth = toggleW + cols.fold(0.0, (s, c) => s + widthFor(c));
-    final rightWidth = days.length * dayWidth;
+    // +2px slack so sub-pixel/border accumulation can never trip an overflow.
+    final rightWidth = days.length * dayWidth + 2;
     final totalTableWidth = taskColWidth + rightWidth;
     final screenWidth = MediaQuery.of(context).size.width;
     final shouldCenter = totalTableWidth < screenWidth - 32;

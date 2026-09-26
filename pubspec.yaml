@@ -25,6 +25,8 @@ dependencies:
   flutter_local_notifications: ^17.1.2
   timezone: ^0.9.4
   flutter_quill: ^11.6.0
+  image_picker: ^1.2.3
+  image: ^4.10.1
 dev_dependencies:
   flutter_test:
     sdk: flutter

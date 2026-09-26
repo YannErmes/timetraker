@@ -7,6 +7,7 @@ import 'package:flutter_quill/flutter_quill.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import 'config/app_colors.dart';
+import 'config/ui_style.dart';
 import 'providers/app_providers.dart';
 import 'providers/display_prefs.dart';
 import 'screens/auth_screen.dart';
@@ -49,6 +50,9 @@ class _TrackerAppState extends ConsumerState<TrackerApp> {
       await identity.init();
       final svc = ref.read(supabaseServiceProvider);
       await svc.init();
+      // Device-level custom background (for the Custom theme).
+      ref.read(customBgBytesProvider.notifier).state = await CustomBg.load();
+      ref.read(customBgBrightnessProvider.notifier).state = await CustomBg.loadBrightness();
       if (mounted) setState(() => _init = true);
     });
   }
@@ -56,10 +60,13 @@ class _TrackerAppState extends ConsumerState<TrackerApp> {
   @override
   Widget build(BuildContext context) {
     final prefs = ref.watch(displayPrefsProvider);
+    final bgBytes = ref.watch(customBgBytesProvider);
+    final brightness = ref.watch(customBgBrightnessProvider);
     // Drive the AppColors palette from the theme preference. The home key
     // forces a full subtree rebuild so every AppColors read picks up the
     // new palette (widgets read AppColors directly, not via Theme.of).
     AppColors.lightMode = prefs.lightMode;
+    AppColors.customBg = prefs.theme == 'custom' && bgBytes != null;
     if (!_init) {
       return MaterialApp(
         debugShowCheckedModeBanner: false,
@@ -95,9 +102,22 @@ class _TrackerAppState extends ConsumerState<TrackerApp> {
         }
         return supported.first;
       },
-      home: loggedIn
-          ? HomeScreen(key: ValueKey('home-${prefs.lightMode}'))
-          : AuthScreen(key: ValueKey('auth-${prefs.lightMode}')),
+      home: Builder(builder: (ctx) {
+        final page = loggedIn
+            ? HomeScreen(key: ValueKey('home-${prefs.theme}'))
+            : AuthScreen(key: ValueKey('auth-${prefs.theme}'));
+        // Custom theme: photo background + dim overlay for eye comfort,
+        // page itself draws translucent frosted surfaces over it.
+        if (AppColors.customBg && bgBytes != null) {
+          final dim = ((1.0 - brightness) * 0.8).clamp(0.0, 0.85);
+          return Stack(children: [
+            Positioned.fill(child: Image.memory(bgBytes, fit: BoxFit.cover)),
+            Positioned.fill(child: Container(color: Colors.black.withValues(alpha: dim))),
+            page,
+          ]);
+        }
+        return page;
+      }),
     );
   }
 }

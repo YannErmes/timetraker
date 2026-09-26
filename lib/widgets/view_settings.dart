@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:tracker_sheet/l10n/app_localizations.dart';
 import '../config/app_colors.dart';
+import '../config/ui_style.dart';
+import '../config/app_colors.dart';
 import '../providers/app_providers.dart';
 import '../providers/display_prefs.dart';
 import '../services/google_calendar_service.dart';
@@ -82,15 +84,20 @@ class _DensityDialog extends ConsumerWidget {
             const SizedBox(height: 16),
             Text(t.appearanceLbl, style: TextStyle(color: AppColors.textSecondary, fontSize: 12, fontWeight: FontWeight.w600)),
             const SizedBox(height: 6),
-            SegmentedButton<bool>(
+            SegmentedButton<String>(
               segments: [
-                ButtonSegment(value: false, label: Text(t.darkBtn), icon: Icon(Icons.dark_mode_outlined, size: 14)),
-                ButtonSegment(value: true, label: Text(t.lightBtn), icon: Icon(Icons.light_mode_outlined, size: 14)),
+                ButtonSegment(value: 'dark', label: Text(t.darkBtn), icon: Icon(Icons.dark_mode_outlined, size: 14)),
+                ButtonSegment(value: 'light', label: Text(t.lightBtn), icon: Icon(Icons.light_mode_outlined, size: 14)),
+                ButtonSegment(value: 'custom', label: Text(t.customBtn), icon: Icon(Icons.image_outlined, size: 14)),
               ],
-              selected: {prefs.lightMode},
-              onSelectionChanged: (s) => ref.read(displayPrefsProvider.notifier).setLightMode(s.first),
+              selected: {prefs.theme},
+              onSelectionChanged: (s) => ref.read(displayPrefsProvider.notifier).setTheme(s.first),
               style: const ButtonStyle(visualDensity: VisualDensity.compact),
             ),
+            if (prefs.theme == 'custom') ...[
+              const SizedBox(height: 8),
+              const _CustomBgSection(),
+            ],
             const SizedBox(height: 16),
             Divider(color: AppColors.border, height: 1),
             const SizedBox(height: 12),
@@ -109,6 +116,99 @@ class _DensityDialog extends ConsumerWidget {
         ),
       ),
       actions: [TextButton(onPressed: ()=> Navigator.pop(context), child: Text(t.close))],
+    );
+  }
+}
+
+class _CustomBgSection extends ConsumerStatefulWidget {
+  const _CustomBgSection();
+  @override
+  ConsumerState<_CustomBgSection> createState() => _CustomBgSectionState();
+}
+
+class _CustomBgSectionState extends ConsumerState<_CustomBgSection> {
+  bool _picking = false;
+
+  Future<void> _pick() async {
+    setState(() => _picking = true);
+    try {
+      final bytes = await CustomBg.pick();
+      if (bytes != null) {
+        await CustomBg.save(bytes);
+        ref.read(customBgBytesProvider.notifier).state = bytes;
+      }
+    } finally {
+      if (mounted) setState(() => _picking = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final t = AppLocalizations.of(context)!;
+    final bytes = ref.watch(customBgBytesProvider);
+    final brightness = ref.watch(customBgBrightnessProvider);
+    return Container(
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(color: AppColors.inputFill, borderRadius: BorderRadius.circular(8), border: Border.all(color: AppColors.border)),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Row(children: [
+          Container(
+            width: 56,
+            height: 56,
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: AppColors.border),
+              color: AppColors.bg,
+              image: bytes != null ? DecorationImage(image: MemoryImage(bytes), fit: BoxFit.cover) : null,
+            ),
+            child: bytes == null ? Icon(Icons.image_outlined, size: 22, color: AppColors.textSecondary) : null,
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text(t.customHelp, style: TextStyle(fontSize: 10, color: AppColors.textSecondary)),
+              const SizedBox(height: 6),
+              Row(children: [
+                FilledButton.icon(
+                  onPressed: _picking ? null : _pick,
+                  icon: _picking
+                      ? const SizedBox(width: 12, height: 12, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                      : const Icon(Icons.upload_rounded, size: 14),
+                  label: Text(t.chooseImageBtn, style: const TextStyle(fontSize: 11)),
+                  style: FilledButton.styleFrom(padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6), textStyle: const TextStyle(fontSize: 11)),
+                ),
+                if (bytes != null) ...[
+                  const SizedBox(width: 6),
+                  TextButton(
+                    onPressed: () async {
+                      await CustomBg.clear();
+                      ref.read(customBgBytesProvider.notifier).state = null;
+                    },
+                    style: TextButton.styleFrom(padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6), minimumSize: Size.zero, tapTargetSize: MaterialTapTargetSize.shrinkWrap),
+                    child: Text(t.removeImageBtn, style: const TextStyle(fontSize: 11)),
+                  ),
+                ],
+              ]),
+            ]),
+          ),
+        ]),
+        const SizedBox(height: 8),
+        Row(children: [
+          Icon(Icons.brightness_6_outlined, size: 14, color: AppColors.textSecondary),
+          const SizedBox(width: 4),
+          Expanded(child: Text(t.brightnessLbl, style: TextStyle(fontSize: 11, color: AppColors.textSecondary, fontWeight: FontWeight.w600))),
+          Text('${(brightness * 100).round()}%', style: TextStyle(fontSize: 11, color: AppColors.textPrimary, fontWeight: FontWeight.w700)),
+        ]),
+        Slider(
+          value: brightness,
+          min: 0.15,
+          max: 1.0,
+          divisions: 17,
+          activeColor: AppColors.accent,
+          onChanged: (v) => ref.read(customBgBrightnessProvider.notifier).state = v,
+          onChangeEnd: (v) => CustomBg.saveBrightness(v),
+        ),
+      ]),
     );
   }
 }

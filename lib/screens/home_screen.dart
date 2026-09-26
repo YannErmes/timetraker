@@ -46,6 +46,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     final identity = ref.watch(identityServiceProvider);
     final isMobile = MediaQuery.of(context).size.width < 700;
     final t = AppLocalizations.of(context)!;
+    final now = DateTime.now();
+    final todayStr = '${now.month}/${now.day}/${now.year}';
     return Scaffold(
       key: _scaffoldKey,
       backgroundColor: AppColors.bg,
@@ -67,6 +69,10 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                     Icon(Icons.person_rounded, size: 12, color: AppColors.accent),
                     const SizedBox(width: 4),
                     Flexible(child: Text(identity.name!, style: TextStyle(color: AppColors.textSecondary, fontSize: 11, fontWeight: FontWeight.w600), overflow: TextOverflow.ellipsis)),
+                    Text('  ·  ', style: TextStyle(color: AppColors.textSecondary, fontSize: 11)),
+                    Icon(Icons.calendar_today_rounded, size: 11, color: AppColors.accent),
+                    const SizedBox(width: 3),
+                    Text(todayStr, style: TextStyle(color: AppColors.textSecondary, fontSize: 11, fontWeight: FontWeight.w600)),
                   ]),
                 ),
               ),
@@ -75,11 +81,18 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         }),
         actions: [
           Builder(builder: (ctx) {
-            final light = ref.watch(displayPrefsProvider).lightMode;
+            final theme = ref.watch(displayPrefsProvider).theme;
+            final next = theme == 'dark' ? 'light' : theme == 'light' ? 'custom' : 'dark';
             return IconButton(
-              icon: Icon(light ? Icons.light_mode_outlined : Icons.dark_mode_outlined, color: AppColors.textSecondary),
-              tooltip: light ? t.switchDark : t.switchLight,
-              onPressed: () => ref.read(displayPrefsProvider.notifier).setLightMode(!light),
+              icon: Icon(
+                  theme == 'dark'
+                      ? Icons.dark_mode_outlined
+                      : theme == 'light'
+                          ? Icons.light_mode_outlined
+                          : Icons.image_outlined,
+                  color: AppColors.textSecondary),
+              tooltip: theme == 'dark' ? t.switchLight : theme == 'light' ? t.switchCustom : t.switchDark,
+              onPressed: () => ref.read(displayPrefsProvider.notifier).setTheme(next),
             );
           }),
           _SyncStatusButton(svc: svc, email: identity.name),

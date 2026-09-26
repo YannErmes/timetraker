@@ -26,10 +26,11 @@ _PillStyle _pillFor(String? id) {
     case 'in_progress':
     case 'in progress':
       return _PillStyle(fill: AppColors.inProgressFill, text: AppColors.inProgressText, border: AppColors.inProgressBorder);
-    case 'idle':
     case 'none':
+      return _PillStyle(fill: AppColors.purpleFill, text: AppColors.purpleText, border: AppColors.purpleBorder);
+    case 'idle':
     default:
-      // idle / none / unset = quiet slate, low contrast
+      // idle / unset = quiet slate, low contrast
       return _PillStyle(fill: AppColors.inputFill, text: AppColors.textSecondary, border: AppColors.inputBorder);
   }
 }

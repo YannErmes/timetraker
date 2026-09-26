@@ -10,6 +10,9 @@ class ColumnVisibilityNotifier extends StateNotifier<Set<String>> {
     _load();
     // keep visibility in sync when columns change (new columns default visible)
     ref.listen(supabaseServiceProvider, (_, __) => _syncWithColumns());
+    // Identity resolves async AFTER providers are built; reload then so we
+    // read the real user's key instead of the 'anon' fallback.
+    ref.listen(identityStreamProvider, (_, __) => _load());
   }
 
   String _key(String userId) => 'column_visibility_hidden_$userId';

@@ -1991,6 +1991,42 @@ abstract class AppLocalizations {
   /// **'Light'**
   String get lightBtn;
 
+  /// No description provided for @customBtn.
+  ///
+  /// In en, this message translates to:
+  /// **'Custom'**
+  String get customBtn;
+
+  /// No description provided for @switchCustom.
+  ///
+  /// In en, this message translates to:
+  /// **'Switch to custom theme'**
+  String get switchCustom;
+
+  /// No description provided for @customHelp.
+  ///
+  /// In en, this message translates to:
+  /// **'Use a photo from this device as your background. Surfaces turn frosted so text stays readable.'**
+  String get customHelp;
+
+  /// No description provided for @chooseImageBtn.
+  ///
+  /// In en, this message translates to:
+  /// **'Choose image'**
+  String get chooseImageBtn;
+
+  /// No description provided for @removeImageBtn.
+  ///
+  /// In en, this message translates to:
+  /// **'Remove'**
+  String get removeImageBtn;
+
+  /// No description provided for @brightnessLbl.
+  ///
+  /// In en, this message translates to:
+  /// **'Background brightness'**
+  String get brightnessLbl;
+
   /// No description provided for @columnVisibilityHelp.
   ///
   /// In en, this message translates to:

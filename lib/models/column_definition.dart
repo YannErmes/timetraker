@@ -122,7 +122,7 @@ class ColumnDefinition {
           config: {
             'options': [
               const StatusOption(id: 'idle', label: 'idle', colorHex: '#475569').toJson(),
-              const StatusOption(id: 'none', label: 'none', colorHex: '#64748B').toJson(),
+              const StatusOption(id: 'none', label: 'none', colorHex: '#7C3AED').toJson(),
               const StatusOption(id: 'done', label: 'done', colorHex: '#22C55E').toJson(),
               const StatusOption(id: 'cancel', label: 'cancel', colorHex: '#F43F5E').toJson(),
               const StatusOption(id: 'in_progress', label: 'in progress', colorHex: '#F59E0B').toJson(),

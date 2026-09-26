@@ -1047,6 +1047,24 @@ class AppLocalizationsEn extends AppLocalizations {
   String get lightBtn => 'Light';
 
   @override
+  String get customBtn => 'Custom';
+
+  @override
+  String get switchCustom => 'Switch to custom theme';
+
+  @override
+  String get customHelp => 'Use a photo from this device as your background. Surfaces turn frosted so text stays readable.';
+
+  @override
+  String get chooseImageBtn => 'Choose image';
+
+  @override
+  String get removeImageBtn => 'Remove';
+
+  @override
+  String get brightnessLbl => 'Background brightness';
+
+  @override
   String get columnVisibilityHelp => 'Column visibility is saved per user. Hide schedule/time/status/note to focus the table — e.g., show only status or only time.';
 
   @override

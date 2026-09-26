@@ -1047,6 +1047,24 @@ class AppLocalizationsFr extends AppLocalizations {
   String get lightBtn => 'Clair';
 
   @override
+  String get customBtn => 'Perso';
+
+  @override
+  String get switchCustom => 'Passer au thème personnalisé';
+
+  @override
+  String get customHelp => 'Utilisez une photo de cet appareil en fond. Les surfaces deviennent dépolies pour garder le texte lisible.';
+
+  @override
+  String get chooseImageBtn => 'Choisir une image';
+
+  @override
+  String get removeImageBtn => 'Retirer';
+
+  @override
+  String get brightnessLbl => 'Luminosité du fond';
+
+  @override
   String get columnVisibilityHelp => 'La visibilité est enregistrée par utilisateur. Masquez horaire/durée/statut/note pour vous concentrer — p. ex. statut seul.';
 
   @override
