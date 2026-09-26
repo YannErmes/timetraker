@@ -160,6 +160,7 @@ class _CloudStatusRow extends StatelessWidget {
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
             Text(ok ? t.cloudOkTip : t.cloudNotConfigured, style: TextStyle(fontSize: 10.5, color: color, fontWeight: FontWeight.w600)),
             Text(host, style: TextStyle(fontSize: 9.5, color: AppColors.textSecondary), maxLines: 1, overflow: TextOverflow.ellipsis),
+            Text(supabaseKeyLabel, style: TextStyle(fontSize: 9.5, color: AppColors.textSecondary), maxLines: 1, overflow: TextOverflow.ellipsis),
           ]),
         ),
       ]),
