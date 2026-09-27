@@ -1,12 +1,11 @@
 # Validates the iOS build on a free GitHub-hosted macOS runner.
 #
 # NOTE: Apple requires a paid Apple Developer account ($99/year) to sign an
-# app for real iPhones (or TestFlight). Without signing, this workflow
-# produces an UNSIGNED device build — good for proving the code compiles
-# for iOS, but it cannot be installed on a phone.
-# Once you have the developer account, add signing (certificates +
-# provisioning profile as secrets) and switch the build step to
-# `flutter build ipa` with an ExportOptions.plist.
+# app for real iPhones (or TestFlight). Without signing this workflow produces
+# an UNSIGNED build, packaged as 4cus-unsigned.ipa. It proves the code compiles
+# for iOS, but iOS will NOT install it on a device. To get a real installable
+# ipa, add signing as secrets (certificates + provisioning profile) and switch
+# the build step to `flutter build ipa` with an ExportOptions.plist.
 #
 # Secrets (same as the Windows build):
 #   SUPABASE_URL, SUPABASE_ANON_KEY
@@ -37,8 +36,24 @@ jobs:
       - name: Build iOS (no codesign)
         run: flutter build ios --release --no-codesign
 
+      # `--no-codesign` emits a .app bundle, not an .ipa. Repackage it into a
+      # real .ipa (a zip with Payload/Runner.app inside) so there is one file
+      # to download. NOTE: unsigned, so iOS will still refuse to install it on
+      # a device until you add signing (see the header).
+      - name: Package unsigned .ipa
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf payload && mkdir -p payload
+          cp -R build/ios/iphoneos/Runner.app payload/
+          zip -qry 4cus-unsigned.ipa payload
+          echo "ipa contents:" && unzip -l 4cus-unsigned.ipa | head -5
+          file build/ios/iphoneos/Runner.app/Runner
+
       - uses: actions/upload-artifact@v4
         with:
           name: 4cus-ios-unsigned
-          path: build/ios/iphoneos/Runner.app
+          path: |
+            4cus-unsigned.ipa
+            build/ios/iphoneos/Runner.app
           retention-days: 14
