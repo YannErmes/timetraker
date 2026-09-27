@@ -1,4 +1,4 @@
-﻿import 'dart:async';
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
@@ -108,6 +108,16 @@ class NotificationService {
       if (best == null || j.fireAt.isBefore(best.fireAt)) best = j;
     }
     return best;
+  }
+
+  /// Stop the in-app timers. A widget test cannot finish while the 20s ticker
+  /// and the nearest-alarm timer are still pending.
+  @visibleForTesting
+  void dispose() {
+    _ticker?.cancel();
+    _ticker = null;
+    _nearest?.cancel();
+    _nearest = null;
   }
 
   Future<void> init() async {
@@ -224,19 +234,19 @@ class NotificationService {
     final s = await getSettings();
     if (!s.enabled || !s.timerDone) return;
     await showImmediate(
-      title: _isFr ? 'Minuteur terminÃ©' : 'Timer done',
-      body: _isFr ? '"$taskName" â€” temps Ã©coulÃ© !' : '"$taskName" â€” time is up!',
+      title: _isFr ? 'Minuteur terminé' : 'Timer done',
+      body: _isFr ? '"$taskName" — temps écoulé !' : '"$taskName" — time is up!',
     );
   }
 
   Future<void> showNextTasks(String body) async {
     final s = await getSettings();
     if (!s.enabled || !s.dailyDigest) return;
-    await showImmediate(title: _isFr ? 'TÃ¢ches du jour' : "Today's tasks", body: body);
+    await showImmediate(title: _isFr ? 'Tâches du jour' : "Today's tasks", body: body);
   }
 
-  String get _digestTitle => _isFr ? 'TÃ¢ches du jour' : "Today's tasks";
-  String get _digestBody => _isFr ? 'Touchez pour voir le programme du jour' : 'Tap to see whatâ€™s scheduled for today';
+  String get _digestTitle => _isFr ? 'Tâches du jour' : "Today's tasks";
+  String get _digestBody => _isFr ? 'Touchez pour voir le programme du jour' : 'Tap to see what’s scheduled for today';
 
   Future<void> scheduleDailyDigest(String timeHHmm) async {
     _settings ??= (await getSettings()).copyWith(dailyTime: timeHHmm);
@@ -250,7 +260,7 @@ class NotificationService {
     final h = int.tryParse(parts[0]) ?? 8;
     final m = parts.length > 1 ? int.tryParse(parts[1]) ?? 0 : 0;
     final details = NotificationDetails(
-      android: AndroidNotificationDetails('tracker_daily', _isFr ? 'RÃ©sumÃ© du jour' : 'Daily digest', channelDescription: _isFr ? 'TÃ¢ches du matin' : 'Morning tasks', importance: Importance.high, priority: Priority.high),
+      android: AndroidNotificationDetails('tracker_daily', _isFr ? 'Résumé du jour' : 'Daily digest', channelDescription: _isFr ? 'Tâches du matin' : 'Morning tasks', importance: Importance.high, priority: Priority.high),
       iOS: const DarwinNotificationDetails(),
     );
     // Use next occurrence of that time
@@ -348,7 +358,7 @@ class NotificationService {
     for (final job in desired) {
       try {
         final details = NotificationDetails(
-          android: AndroidNotificationDetails('tracker_task', _isFr ? 'Rappels de tÃ¢ches' : 'Task reminders', channelDescription: _isFr ? 'Rappels avant une tÃ¢che' : 'Reminders before a task', importance: Importance.high, priority: Priority.high),
+          android: AndroidNotificationDetails('tracker_task', _isFr ? 'Rappels de tâches' : 'Task reminders', channelDescription: _isFr ? 'Rappels avant une tâche' : 'Reminders before a task', importance: Importance.high, priority: Priority.high),
           iOS: const DarwinNotificationDetails(),
         );
         await _plugin.zonedSchedule(

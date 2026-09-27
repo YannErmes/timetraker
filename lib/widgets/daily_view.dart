@@ -27,6 +27,8 @@ class DailyView extends ConsumerStatefulWidget {
 
 class _DailyViewState extends ConsumerState<DailyView> {
   int _rowPage = 0;
+  /// Phone-only: the detailed stat chips stay collapsed behind the summary row.
+  bool _statsOpen = false;
   @override
   Widget build(BuildContext context) {
     final svc = ref.watch(supabaseServiceProvider);
@@ -110,10 +112,16 @@ class _DailyViewState extends ConsumerState<DailyView> {
     }
     final pct = total == 0 ? 0.0 : done / total;
     final width = MediaQuery.of(context).size.width;
+    final mobile = width < 600;
     final crossAxisCount = width < 600 ? 1 : width < 900 ? 2 : width < 1300 ? 3 : 4;
-    // Taller cards on narrow screens so cells + note preview fit; squarer on desktop.
-    final cardAspect = width < 420 ? 0.72 : width < 600 ? 0.8 : width < 900 ? 0.92 : 1.0;
-    final gridGap = width < 600 ? 8.0 : 12.0;
+    // On a phone the 1-column grid used aspect 0.72, i.e. a 400px-wide card
+    // 560px tall - one task filled the screen. Target a fixed ~190px height
+    // instead by deriving the ratio from the real card width.
+    final gridGap = mobile ? 8.0 : 12.0;
+    final cardWidth = (width - gridGap * (crossAxisCount + 1)) / crossAxisCount;
+    final cardAspect = mobile
+        ? cardWidth / 190
+        : width < 900 ? 0.92 : 1.0;
     final dayLabel = '${formatWeekday(date)} ${formatDayHeader(date)}';
 
     return Container(
@@ -151,20 +159,53 @@ class _DailyViewState extends ConsumerState<DailyView> {
             ]),
             const SizedBox(height: 10),
             LinearProgressIndicator(value: pct, minHeight: 6, backgroundColor: AppColors.inputFill, valueColor: AlwaysStoppedAnimation(pct >= 1 ? const Color(0xFF22C55E) : AppColors.accent), borderRadius: BorderRadius.circular(8)),
-            const SizedBox(height: 12),
-            Wrap(spacing: 8, runSpacing: 8, children: [
-              _statChip(Icons.list_alt_rounded, loc.totalChip, loc.tasksCount('$total'), AppColors.textPrimary),
-              _statChip(Icons.check_circle_rounded, loc.doneChip, '$done', const Color(0xFF22C55E)),
-              _statChip(Icons.timelapse_rounded, loc.progChip, '$inProgress', const Color(0xFFF59E0B)),
-              _statChip(Icons.schedule_rounded, loc.totalTimeChip, TimerValue.formatSec(totalSec), AppColors.accent),
-              _statChip(Icons.hourglass_bottom_rounded, loc.doneTimeChip, TimerValue.formatSec(doneSec), const Color(0xFF22C55E)),
-              _statChip(Icons.hourglass_empty_rounded, loc.leftChip, TimerValue.formatSec(remainingSec), const Color(0xFFF43F5E)),
-              _statChip(Icons.timelapse_rounded, loc.elapsedChip, TimerValue.formatSec(elapsedSec), AppColors.textSecondary),
-            ]),
+            // Phones get one summary line; the seven chips plus the Done/Left
+            // recap pushed the actual task list off the screen.
+            if (mobile) ...[
+              const SizedBox(height: 8),
+              InkWell(
+                onTap: () => setState(() => _statsOpen = !_statsOpen),
+                borderRadius: BorderRadius.circular(8),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 2),
+                  child: Row(children: [
+                    Expanded(
+                      child: Text(
+                        '${loc.totalChip} $total  ·  ${loc.doneChip} $done  ·  ${loc.progChip} $inProgress  ·  ${loc.leftChip} ${TimerValue.formatSec(remainingSec)}',
+                        style: TextStyle(fontSize: 11, color: AppColors.textSecondary),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    Icon(_statsOpen ? Icons.expand_less_rounded : Icons.expand_more_rounded, size: 16, color: AppColors.textSecondary),
+                  ]),
+                ),
+              ),
+            ],
+            if (!mobile || _statsOpen) ...[
+              const SizedBox(height: 12),
+              Wrap(spacing: 8, runSpacing: 8, children: [
+                _statChip(Icons.list_alt_rounded, loc.totalChip, loc.tasksCount('$total'), AppColors.textPrimary),
+                _statChip(Icons.check_circle_rounded, loc.doneChip, '$done', const Color(0xFF22C55E)),
+                _statChip(Icons.timelapse_rounded, loc.progChip, '$inProgress', const Color(0xFFF59E0B)),
+                _statChip(Icons.schedule_rounded, loc.totalTimeChip, TimerValue.formatSec(totalSec), AppColors.accent),
+                _statChip(Icons.hourglass_bottom_rounded, loc.doneTimeChip, TimerValue.formatSec(doneSec), const Color(0xFF22C55E)),
+                _statChip(Icons.hourglass_empty_rounded, loc.leftChip, TimerValue.formatSec(remainingSec), const Color(0xFFF43F5E)),
+                _statChip(Icons.timelapse_rounded, loc.elapsedChip, TimerValue.formatSec(elapsedSec), AppColors.textSecondary),
+              ]),
+            ],
             if (doneNames.isNotEmpty || todoNames.isNotEmpty) ...[
               const SizedBox(height: 10),
               Divider(color: AppColors.border, height: 1),
               const SizedBox(height: 8),
+              if (mobile)
+                // One line each instead of two side-by-side columns.
+                Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  Row(children: [Icon(Icons.check, size: 12, color: Color(0xFF22C55E)), SizedBox(width: 4), Text('${loc.doneSection}: ', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: Color(0xFF22C55E))), Expanded(child: Text(doneNames.isEmpty ? '—' : doneNames.take(4).join(', '), style: TextStyle(fontSize: 11, color: AppColors.textSecondary), maxLines: 1, overflow: TextOverflow.ellipsis))]),
+                  const SizedBox(height: 4),
+                  Row(children: [Icon(Icons.pending_rounded, size: 12, color: AppColors.textSecondary), SizedBox(width: 4), Text('${loc.leftToDo}: ', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: AppColors.textSecondary)), Expanded(child: Text(todoNames.isEmpty ? '—' : todoNames.take(4).join(', '), style: TextStyle(fontSize: 11, color: AppColors.textSecondary), maxLines: 1, overflow: TextOverflow.ellipsis))]),
+                ])
+              else
               Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
                 Expanded(
                   child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [

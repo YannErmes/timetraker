@@ -195,29 +195,54 @@ class _WeeklyGridState extends ConsumerState<WeeklyGrid> {
           color: AppColors.header,
           padding: EdgeInsets.symmetric(horizontal: narrow ? 6 : 12, vertical: 8),
           child: Row(children: [
-            IconButton(icon: Icon(Icons.chevron_left, color: AppColors.textSecondary), onPressed: () => ref.read(selectedDateProvider.notifier).state = anchor.subtract(Duration(days: 7))),
+            // A 393px phone cannot fit five 48px icon buttons + Today + the
+            // day pager, so on narrow screens every control shrinks to its
+            // icon box and the title absorbs what is left.
+            IconButton(
+              icon: Icon(Icons.chevron_left, color: AppColors.textSecondary),
+              style: _iconBtnStyle(narrow),
+              onPressed: () => ref.read(selectedDateProvider.notifier).state = anchor.subtract(Duration(days: 7)),
+            ),
             Flexible(
               child: Text('${formatShort(allDays.first)} – ${formatShort(allDays.last)} ${allDays.first.year}',
                   style: TextStyle(fontWeight: FontWeight.w700, color: AppColors.textPrimary, fontSize: narrow ? 11 : 13), overflow: TextOverflow.ellipsis),
             ),
-            IconButton(icon: Icon(Icons.chevron_right, color: AppColors.textSecondary), onPressed: () => ref.read(selectedDateProvider.notifier).state = anchor.add(Duration(days: 7))),
+            IconButton(
+              icon: Icon(Icons.chevron_right, color: AppColors.textSecondary),
+              style: _iconBtnStyle(narrow),
+              onPressed: () => ref.read(selectedDateProvider.notifier).state = anchor.add(Duration(days: 7)),
+            ),
             if (!narrow) const Spacer(),
             if (daysVisible < allDays.length) ...[
-              IconButton(icon: const Icon(Icons.chevron_left, size: 18), tooltip: t.prevDaysTip, onPressed: _dayPage > 0 ? () => setState(() => _dayPage--) : null),
+              IconButton(icon: const Icon(Icons.chevron_left, size: 18), tooltip: t.prevDaysTip, style: _iconBtnStyle(narrow), onPressed: _dayPage > 0 ? () => setState(() => _dayPage--) : null),
               Text('${_dayPage + 1}/$dayPages', style: TextStyle(fontSize: 11, color: AppColors.textSecondary)),
-              IconButton(icon: const Icon(Icons.chevron_right, size: 18), tooltip: t.nextDaysTip, onPressed: _dayPage < dayPages - 1 ? () => setState(() => _dayPage++) : null),
-              const SizedBox(width: 4),
+              IconButton(icon: const Icon(Icons.chevron_right, size: 18), tooltip: t.nextDaysTip, style: _iconBtnStyle(narrow), onPressed: _dayPage < dayPages - 1 ? () => setState(() => _dayPage++) : null),
+              if (!narrow) const SizedBox(width: 4),
             ],
-            OutlinedButton(onPressed: _goToday, child: Text(t.today)),
+            OutlinedButton(
+              style: OutlinedButton.styleFrom(
+                minimumSize: Size(0, narrow ? 30 : 40),
+                padding: EdgeInsets.symmetric(horizontal: narrow ? 8 : 16),
+                textStyle: TextStyle(fontSize: narrow ? 11 : 14),
+                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              ),
+              onPressed: _goToday,
+              child: Text(t.today),
+            ),
             const SizedBox(width: 4),
             IconButton(
               icon: Icon(_pool ? Icons.table_chart_outlined : Icons.account_tree_outlined, color: AppColors.textSecondary),
               tooltip: _pool ? t.tableView : t.poolView,
+              style: _iconBtnStyle(narrow),
               onPressed: () => setState(() => _pool = !_pool),
             ),
-            const SizedBox(width: 4),
             narrow
-                ? IconButton.filled(onPressed: () => _addTaskDialog(context), icon: Icon(Icons.add, size: 18), tooltip: t.addTask)
+                ? IconButton.filled(
+                    style: _iconBtnStyle(narrow, filled: true),
+                    onPressed: () => _addTaskDialog(context),
+                    icon: Icon(Icons.add, size: 18),
+                    tooltip: t.addTask,
+                  )
                 : FilledButton.icon(onPressed: () => _addTaskDialog(context), icon: Icon(Icons.add, size: 16), label: Text(t.addTask)),
           ]),
         ),
@@ -241,27 +266,42 @@ class _WeeklyGridState extends ConsumerState<WeeklyGrid> {
 
   Widget _buildStickyGrid(BuildContext context, List tasks, List allTasks, List<ColumnDefinition> cols, List<DateTime> days, int rowsVisible, int rowPage) {
     final loc = AppLocalizations.of(context)!;
-    const taskColWidth = 160.0;
+    final screenWidth = MediaQuery.of(context).size.width;
+    // A phone cannot show a 7-day spreadsheet: 160 + 76x7 = 692px of table on a
+    // ~420px screen meant 1.5 visible days, clipped names and constant
+    // horizontal scrolling. On narrow screens the week collapses to one status
+    // dot per day so the whole week fits without scrolling.
+    final mobile = screenWidth < 600;
+    final veryNarrow = screenWidth < 400;
+    final hasStatus = cols.any((c) => c.type == ColumnType.status);
+    final visibleCols = mobile
+        ? (hasStatus ? cols.where((c) => c.type == ColumnType.status).take(1).toList() : cols.where((c) => c.type == ColumnType.checkbox).take(1).toList())
+        : cols;
+    final dayColWidth = veryNarrow ? 34.0 : 40.0;
+    final taskColWidth = mobile ? (veryNarrow ? 148.0 : 168.0) : 160.0;
     const fullColWidth = 132.0;
     const basicColWidth = 76.0;
     final basic = ref.watch(displayPrefsProvider).basicCells;
-    // Schedule-toggle column only when no visible status column assigns days.
-    final toggleW = _needsToggle(cols) ? 48.0 : 0.0;
+    // Schedule-toggle column only when no visible status column assigns days
+    // (never on mobile: the day cell itself is the dot/checkbox).
+    final toggleW = (!mobile && _needsToggle(cols)) ? 48.0 : 0.0;
     // In Basic mode timer/status cells are icon-only, so they get narrow columns.
-    double widthFor(ColumnDefinition col) =>
-        (basic && (col.type == ColumnType.timer || col.type == ColumnType.status)) ? basicColWidth : fullColWidth;
-    final dayWidth = toggleW + cols.fold(0.0, (s, c) => s + widthFor(c));
+    double widthFor(ColumnDefinition col) => mobile
+        ? dayColWidth
+        : (basic && (col.type == ColumnType.timer || col.type == ColumnType.status)) ? basicColWidth : fullColWidth;
+    final dayWidth = toggleW + visibleCols.fold(0.0, (s, c) => s + widthFor(c));
     // +2px slack so sub-pixel/border accumulation can never trip an overflow.
     final rightWidth = days.length * dayWidth + 2;
     // Contrasted divider between day blocks (header mirrors the body rows).
     final dayEdge = BorderSide(color: AppColors.textSecondary.withValues(alpha: 0.45), width: 1.5);
     final totalTableWidth = taskColWidth + rightWidth;
-    final screenWidth = MediaQuery.of(context).size.width;
+    final headerH = mobile ? 44.0 : 64.0;
+    final rowH = mobile ? 44.0 : 48.0;
     final shouldCenter = totalTableWidth < screenWidth - 32;
 
     Widget headerDays = SizedBox(
       width: rightWidth,
-      height: 64,
+      height: headerH,
       child: Row(children: [
         for (final d in days)
           Builder(builder: (_) {
@@ -286,7 +326,20 @@ class _WeeklyGridState extends ConsumerState<WeeklyGrid> {
               foregroundDecoration: flash
                   ? BoxDecoration(borderRadius: BorderRadius.circular(8), border: Border.all(color: AppColors.accent.withValues(alpha: 0.55)))
                   : BoxDecoration(border: Border(right: dayEdge)),
-              child: Column(children: [
+              // Phones get one compact line ("21 Mon"); the full date + the
+              // column-label row is what forced 132px columns.
+              child: mobile
+                  ? Container(
+                      height: headerH,
+                      color: AppColors.header,
+                      alignment: Alignment.center,
+                      padding: const EdgeInsets.symmetric(horizontal: 2),
+                      child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+                        Text('${d.day}', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: AppColors.textPrimary), maxLines: 1),
+                        Text(_cap(_weekdayShort(d)), style: TextStyle(fontSize: 9, fontWeight: FontWeight.w600, color: AppColors.textSecondary), maxLines: 1),
+                      ]),
+                    )
+                  : Column(children: [
               Container(
                 height: 28,
                 color: AppColors.header,
@@ -304,7 +357,7 @@ class _WeeklyGridState extends ConsumerState<WeeklyGrid> {
               // rounding instead of overflowing the 64px header.
               Expanded(child: Row(children: [
                 if (toggleW > 0) const SizedBox(width: 48),
-                for (final col in cols) SizedBox(width: widthFor(col), child: Center(child: Text(col.label, style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: AppColors.textPrimary), maxLines: 1, overflow: TextOverflow.ellipsis))),
+                for (final col in visibleCols) SizedBox(width: widthFor(col), child: Center(child: Text(col.label, style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: AppColors.textPrimary), maxLines: 1, overflow: TextOverflow.ellipsis))),
               ])),
             ]),
                 ),
@@ -318,14 +371,14 @@ class _WeeklyGridState extends ConsumerState<WeeklyGrid> {
     Widget headerRowScrollable = Row(children: [
       Container(
         width: taskColWidth,
-        height: 64,
+        height: headerH,
         decoration: BoxDecoration(
           color: AppColors.header,
           border: Border(right: BorderSide(color: AppColors.border)),
           boxShadow: _hScrolled ? [BoxShadow(color: Colors.black.withValues(alpha: 0.35), blurRadius: 6, offset: const Offset(2, 0))] : null,
         ),
         alignment: Alignment.centerLeft,
-        padding: const EdgeInsets.symmetric(horizontal: 12),
+        padding: EdgeInsets.symmetric(horizontal: mobile ? 6 : 12),
         child: Text(loc.tasksHeader, style: TextStyle(fontWeight: FontWeight.w700, color: AppColors.textPrimary, fontSize: 12, letterSpacing: 0.4)),
       ),
       Expanded(child: SingleChildScrollView(controller: _hHeaderCtrl, scrollDirection: Axis.horizontal, physics: const ClampingScrollPhysics(), child: headerDays)),
@@ -334,17 +387,17 @@ class _WeeklyGridState extends ConsumerState<WeeklyGrid> {
     Widget headerRowFixed = Row(children: [
       Container(
         width: taskColWidth,
-        height: 64,
+        height: headerH,
         decoration: BoxDecoration(
           color: AppColors.header,
           border: Border(right: BorderSide(color: AppColors.border)),
           boxShadow: _hScrolled ? [BoxShadow(color: Colors.black.withValues(alpha: 0.35), blurRadius: 6, offset: const Offset(2, 0))] : null,
         ),
         alignment: Alignment.centerLeft,
-        padding: const EdgeInsets.symmetric(horizontal: 12),
+        padding: EdgeInsets.symmetric(horizontal: mobile ? 6 : 12),
         child: Text(loc.tasksHeader, style: TextStyle(fontWeight: FontWeight.w700, color: AppColors.textPrimary, fontSize: 12, letterSpacing: 0.4)),
       ),
-      SizedBox(width: rightWidth, height: 64, child: SingleChildScrollView(controller: _hHeaderCtrl, scrollDirection: Axis.horizontal, physics: const ClampingScrollPhysics(), child: headerDays)),
+      SizedBox(width: rightWidth, height: headerH, child: SingleChildScrollView(controller: _hHeaderCtrl, scrollDirection: Axis.horizontal, physics: const ClampingScrollPhysics(), child: headerDays)),
     ]);
 
     final header = Container(
@@ -378,10 +431,13 @@ class _WeeklyGridState extends ConsumerState<WeeklyGrid> {
         _RightTaskRow(
           task: tasks[r],
           days: days,
-          cols: cols,
+          cols: visibleCols,
           isAlt: r % 2 == 1,
           flashDayKey: _flashDayKey,
           basic: basic,
+          mobile: mobile,
+          dayColWidth: dayColWidth,
+          rowH: rowH,
           showToggle: toggleW > 0,
           hovered: _hoverTaskId == (tasks[r] as Task).id,
           onHover: (h) => _setHover(h ? (tasks[r] as Task).id : null),
@@ -422,16 +478,29 @@ class _WeeklyGridState extends ConsumerState<WeeklyGrid> {
 
     final body = Expanded(child: RepaintBoundary(child: bodyContent));
 
-    final tipContent = Container(
-      margin: const EdgeInsets.all(12),
-      decoration: BoxDecoration(color: AppColors.surface, border: Border.all(color: AppColors.accent.withValues(alpha: 0.45)), borderRadius: BorderRadius.circular(12)),
-      child: ListTile(
-        dense: true,
-        title: Text(loc.showingTip('${tasks.length}', '${allTasks.length}', days.length == 7 ? '' : loc.daysVisiblePart('${days.length}', '7')),
-            style: TextStyle(fontSize: 11, color: AppColors.textSecondary)),
-        trailing: IconButton(icon: Icon(Icons.add, color: AppColors.accent), onPressed: () => _addTaskDialog(context)),
-      ),
-    );
+    // The tip banner pointed at the desktop tune icon and carried a second
+    // add button; on a phone it just ate a strip of screen (the FAB already
+    // adds tasks), so it becomes one quiet line.
+    final tipContent = mobile
+        ? Padding(
+            padding: const EdgeInsets.fromLTRB(10, 6, 10, 6),
+            child: Text(
+              loc.showingTip('${tasks.length}', '${allTasks.length}', days.length == 7 ? '' : loc.daysVisiblePart('${days.length}', '7')),
+              style: TextStyle(fontSize: 10, color: AppColors.textSecondary),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+          )
+        : Container(
+            margin: const EdgeInsets.all(12),
+            decoration: BoxDecoration(color: AppColors.surface, border: Border.all(color: AppColors.accent.withValues(alpha: 0.45)), borderRadius: BorderRadius.circular(12)),
+            child: ListTile(
+              dense: true,
+              title: Text(loc.showingTip('${tasks.length}', '${allTasks.length}', days.length == 7 ? '' : loc.daysVisiblePart('${days.length}', '7')),
+                  style: TextStyle(fontSize: 11, color: AppColors.textSecondary)),
+              trailing: IconButton(icon: Icon(Icons.add, color: AppColors.accent), onPressed: () => _addTaskDialog(context)),
+            ),
+          );
     final tip = shouldCenter ? Center(child: SizedBox(width: totalTableWidth, child: tipContent)) : tipContent;
 
     return Column(children: [
@@ -519,11 +588,32 @@ class _LeftTaskCell extends ConsumerStatefulWidget {
   ConsumerState<_LeftTaskCell> createState() => _LeftTaskCellState();
 }
 
+/// Compact icon-button box for phone toolbars. IconButton defaults to a
+/// 40-48px tap target, which is what overflowed the weekly toolbar at 393px.
+ButtonStyle _iconBtnStyle(bool narrow, {bool filled = false}) {
+  if (!narrow) return filled ? IconButton.styleFrom(backgroundColor: AppColors.accent) : const ButtonStyle();
+  final fg = filled ? Colors.white : null;
+  return IconButton.styleFrom(
+    minimumSize: const Size(30, 30),
+    maximumSize: const Size(34, 34),
+    padding: EdgeInsets.zero,
+    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+    backgroundColor: filled ? AppColors.accent : null,
+    foregroundColor: fg,
+  );
+}
+
 /// "3 min" / "2 h" / "10 d" - reminder offsets, not relative times.
 String _shortDuration(Duration d) {
   if (d.inDays >= 1) return '${d.inDays} d';
   if (d.inHours >= 1) return '${d.inHours} h';
   return '${d.inMinutes} min';
+}
+
+/// Mon / Tue / ... for the compact phone day header.
+String _weekdayShort(DateTime d) {
+  const names = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+  return names[d.weekday - 1];
 }
 
 /// Locale clock time, e.g. "9:45 PM" / "21:45".
@@ -549,6 +639,9 @@ class _LeftTaskCellState extends ConsumerState<_LeftTaskCell> {
       noteCount = svc.entries.where((e) => e.taskId == task.id && notePlainText(e.data[noteCol.id]).isNotEmpty).length;
     }
     final noUpcomingDay = (task.reminder as String?)?.isNotEmpty == true && svc.nextAssignedEntry(task.id as String) == null;
+    // On a phone-width task column the bell and the menu cannot both fit next
+    // to the name, and the menu already lists the reminder.
+    final mobile = MediaQuery.of(context).size.width < 600;
     // Same source of truth as the scheduler: spell out the time the reminder
     // will actually fire, so "3MI" never looks like "in 3 minutes".
     final remRaw = ((task.reminder as String?) ?? '').trim();
@@ -578,10 +671,10 @@ class _LeftTaskCellState extends ConsumerState<_LeftTaskCell> {
             left: hovered ? hoverSide : BorderSide.none,
           ),
         ),
-        padding: const EdgeInsets.symmetric(horizontal: 8),
+        padding: EdgeInsets.symmetric(horizontal: mobile ? 6 : 8),
         child: Row(children: [
-          Expanded(child: InkWell(onTap: widget.onRename, borderRadius: BorderRadius.circular(8), child: Padding(padding: const EdgeInsets.symmetric(vertical: 4), child: Text(task.name.isEmpty ? '—' : task.name, style: TextStyle(fontSize: 12, color: task.name.isEmpty ? AppColors.textSecondary : AppColors.textPrimary, fontWeight: FontWeight.w500), overflow: TextOverflow.ellipsis)))),
-          if ((task.reminder as String?)?.isNotEmpty == true)
+          Expanded(child: InkWell(onTap: widget.onRename, borderRadius: BorderRadius.circular(8), child: Padding(padding: EdgeInsets.symmetric(vertical: 4, horizontal: mobile ? 2 : 0), child: Text(task.name.isEmpty ? '—' : task.name, style: TextStyle(fontSize: mobile ? 12.5 : 12, color: task.name.isEmpty ? AppColors.textSecondary : AppColors.textPrimary, fontWeight: FontWeight.w500), overflow: TextOverflow.ellipsis)))),
+          if (!mobile && (task.reminder as String?)?.isNotEmpty == true)
             Tooltip(
               message: bellMsg,
               child: Padding(
@@ -592,6 +685,11 @@ class _LeftTaskCellState extends ConsumerState<_LeftTaskCell> {
           PopupMenuButton(
             color: AppColors.surface,
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8), side: BorderSide(color: AppColors.border)),
+            // IconButton defaults to a 40-48px tap target, which ate half of a
+            // 148px task column and left ~4 characters for the name.
+            style: mobile
+                ? IconButton.styleFrom(minimumSize: const Size(30, 30), padding: EdgeInsets.zero, tapTargetSize: MaterialTapTargetSize.shrinkWrap)
+                : null,
             itemBuilder: (_) => [
               // A per-task reminder counts back from the next scheduled
               // occurrence, so an unscheduled task would never fire: say so
@@ -636,10 +734,13 @@ class _RightTaskRow extends ConsumerStatefulWidget {
   final bool isAlt;
   final String? flashDayKey;
   final bool basic;
+  final bool mobile;
+  final double dayColWidth;
+  final double rowH;
   final bool showToggle;
   final bool hovered;
   final ValueChanged<bool> onHover;
-  const _RightTaskRow({required this.task, required this.days, required this.cols, required this.isAlt, this.flashDayKey, required this.basic, required this.showToggle, required this.hovered, required this.onHover});
+  const _RightTaskRow({required this.task, required this.days, required this.cols, required this.isAlt, this.flashDayKey, required this.basic, required this.mobile, required this.dayColWidth, required this.rowH, required this.showToggle, required this.hovered, required this.onHover});
   @override
   ConsumerState<_RightTaskRow> createState() => _RightTaskRowState();
 }
@@ -647,8 +748,9 @@ class _RightTaskRow extends ConsumerStatefulWidget {
 class _RightTaskRowState extends ConsumerState<_RightTaskRow> {
   String _dateKey(DateTime d) =>
       '${d.year.toString().padLeft(4, '0')}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
-  double _widthFor(ColumnDefinition col) =>
-      (widget.basic && (col.type == ColumnType.timer || col.type == ColumnType.status)) ? 76.0 : 132.0;
+  double _widthFor(ColumnDefinition col) => widget.mobile
+      ? widget.dayColWidth
+      : (widget.basic && (col.type == ColumnType.timer || col.type == ColumnType.status)) ? 76.0 : 132.0;
   ColumnDefinition? get _statusCol {
     for (final c in widget.cols) {
       if (c.type == ColumnType.status) return c;
@@ -670,7 +772,7 @@ class _RightTaskRowState extends ConsumerState<_RightTaskRow> {
       onEnter: (_) => widget.onHover(true),
       onExit: (_) => widget.onHover(false),
       child: Container(
-        height: 48,
+        height: widget.rowH,
         decoration: BoxDecoration(color: bg),
         // Hover outline is painted on top: as a `decoration` border the 1.5px
         // right edge would shrink the row and overflow the day cells.
@@ -695,7 +797,7 @@ class _RightTaskRowState extends ConsumerState<_RightTaskRow> {
                 if (widget.showToggle)
                   Container(
                       width: 48,
-                      height: 48,
+                      height: widget.rowH,
                       alignment: Alignment.center,
                       decoration: BoxDecoration(color: flashBg),
                       // Painted over the child, so the 1.5px line never eats
@@ -715,12 +817,12 @@ class _RightTaskRowState extends ConsumerState<_RightTaskRow> {
                 for (int ci = 0; ci < cols.length; ci++)
                   Container(
                       width: _widthFor(cols[ci]),
-                      height: 48,
-                      padding: EdgeInsets.symmetric(horizontal: 6, vertical: 8),
+                      height: widget.rowH,
+                      padding: EdgeInsets.symmetric(horizontal: widget.mobile ? 3 : 6, vertical: 8),
                       decoration: BoxDecoration(color: flashBg),
                       foregroundDecoration: BoxDecoration(border: Border(left: (ci == 0 && !widget.showToggle) ? dayEdge : innerEdge)),
                       alignment: Alignment.center,
-                      child: _Cell(taskId: task.id, date: d, col: cols[ci])),
+                      child: _Cell(taskId: task.id, date: d, col: cols[ci], mobile: widget.mobile)),
               ]);
             }),
           ],
@@ -734,11 +836,14 @@ class _Cell extends ConsumerWidget {
   final String taskId;
   final DateTime date;
   final ColumnDefinition col;
-  const _Cell({required this.taskId, required this.date, required this.col});
+  final bool mobile;
+  const _Cell({required this.taskId, required this.date, required this.col, this.mobile = false});
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final svc = ref.watch(supabaseServiceProvider);
-    final basic = ref.watch(displayPrefsProvider).basicCells;
+    // Phones always get the dot: the full status dropdown is 132px wide and
+    // cannot fit a 7-day strip.
+    final basic = mobile || ref.watch(displayPrefsProvider).basicCells;
     final loc = AppLocalizations.of(context)!;
     final e = svc.entryFor(taskId, date);
     final raw = e?.valueFor(col.id);

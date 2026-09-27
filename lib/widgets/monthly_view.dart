@@ -12,6 +12,7 @@ import '../models/enums.dart';
 import '../services/google_calendar_service.dart';
 import 'day_detail_panel.dart';
 import 'cells/cell_widgets.dart';
+import 'cells/compact_cell.dart';
 import 'cells/timer_cell.dart';
 import '../models/timer_value.dart';
 
@@ -114,7 +115,7 @@ class _MonthlyViewState extends ConsumerState<MonthlyView> {
           child: RepaintBoundary(
             child: GridView.builder(
             padding: const EdgeInsets.all(8),
-            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(crossAxisCount: 7, childAspectRatio: 0.92, crossAxisSpacing: 6, mainAxisSpacing: 6),
+            gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(crossAxisCount: 7, childAspectRatio: isNarrow ? 0.78 : 0.92, crossAxisSpacing: isNarrow ? 4 : 6, mainAxisSpacing: isNarrow ? 4 : 6),
             itemCount: days.length,
             itemBuilder: (_, i) {
               final d = days[i];
@@ -188,33 +189,51 @@ class _MonthlyViewState extends ConsumerState<MonthlyView> {
                           ]
                         : null,
                   ),
-                  padding: const EdgeInsets.all(6),
+                  padding: EdgeInsets.all(isNarrow ? 3 : 6),
+                  // A 7-column month on a phone leaves ~50px per cell. Names,
+                  // a progress bar and a count cannot fit: the phone cell is
+                  // the day number plus one status dot per scheduled task.
                   child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                     Row(children: [
                       Container(
-                        width: 22,
-                        height: 22,
+                        width: isNarrow ? 18 : 22,
+                        height: isNarrow ? 18 : 22,
                         alignment: Alignment.center,
                         decoration: BoxDecoration(color: isToday ? AppColors.accent : Colors.transparent, shape: BoxShape.circle),
-                        child: Text('${d.day}', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: isToday ? Colors.white : isCurrentMonth ? AppColors.textPrimary : AppColors.textSecondary)),
+                        child: Text('${d.day}', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: isToday ? Colors.white : isCurrentMonth ? AppColors.textPrimary : AppColors.textSecondary), maxLines: 1),
                       ),
                       const Spacer(),
-                      if (scheduledEntries.isNotEmpty) Container(width: 10, height: 10, decoration: BoxDecoration(color: heat, shape: BoxShape.circle)),
+                      if (scheduledEntries.isNotEmpty) Container(width: isNarrow ? 7 : 10, height: isNarrow ? 7 : 10, decoration: BoxDecoration(color: heat, shape: BoxShape.circle)),
                     ]),
-                    const SizedBox(height: 4),
-                    Text(t.scheduledOf('$scheduled', '$total'), style: TextStyle(fontSize: 10, color: AppColors.textSecondary)),
-                    const SizedBox(height: 4),
-                    LinearProgressIndicator(value: pct, minHeight: 4, backgroundColor: AppColors.inputFill, valueColor: AlwaysStoppedAnimation(heat), borderRadius: BorderRadius.circular(8)),
-                    if (scheduledEntries.isNotEmpty) ...[
+                    SizedBox(height: isNarrow ? 2 : 4),
+                    Text(t.scheduledOf('$scheduled', '$total'), style: TextStyle(fontSize: isNarrow ? 9 : 10, color: AppColors.textSecondary), maxLines: 1, overflow: TextOverflow.ellipsis),
+                    if (!isNarrow) ...[
                       const SizedBox(height: 4),
+                      LinearProgressIndicator(value: pct, minHeight: 4, backgroundColor: AppColors.inputFill, valueColor: AlwaysStoppedAnimation(heat), borderRadius: BorderRadius.circular(8)),
+                    ],
+                    if (scheduledEntries.isNotEmpty) ...[
+                      SizedBox(height: isNarrow ? 2 : 4),
                       Expanded(
-                        child: ListView(
-                          physics: const NeverScrollableScrollPhysics(),
-                          children: scheduledEntries.take(3).map((e) {
-                            final t = tasks.where((x) => x.id == e.taskId).firstOrNull;
-                            return Text(t == null ? '' : (t.name.isEmpty ? '·' : t.name), style: TextStyle(fontSize: 9, color: AppColors.textSecondary), overflow: TextOverflow.ellipsis);
-                          }).toList(),
-                        ),
+                        child: isNarrow
+                            // One dot per scheduled task, coloured by its status.
+                            ? Builder(builder: (_) {
+                                final statusCol = cols.where((c) => c.type == ColumnType.status).firstOrNull;
+                                return Wrap(
+                                  spacing: 2,
+                                  runSpacing: 2,
+                                  children: scheduledEntries.take(8).map((e) {
+                                    final c = statusCol == null ? heat : statusDotColor(e.data[statusCol.id] as String?, statusCol.statusOptions);
+                                    return Container(width: 6, height: 6, decoration: BoxDecoration(color: c, shape: BoxShape.circle));
+                                  }).toList(),
+                                );
+                              })
+                            : ListView(
+                                physics: const NeverScrollableScrollPhysics(),
+                                children: scheduledEntries.take(3).map((e) {
+                                  final t = tasks.where((x) => x.id == e.taskId).firstOrNull;
+                                  return Text(t == null ? '' : (t.name.isEmpty ? '·' : t.name), style: TextStyle(fontSize: 9, color: AppColors.textSecondary), overflow: TextOverflow.ellipsis);
+                                }).toList(),
+                              ),
                       ),
                     ]
                   ]),
