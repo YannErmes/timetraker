@@ -1,0 +1,127 @@
+# Publishes every `v*` tag as a permanent GitHub Release with all binaries
+# attached, so the marketing site's download page can list the full history
+# (Actions artifacts expire after days; Release assets do not).
+name: Publish release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  android:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - run: flutter pub get
+      - run: flutter build apk --release
+      - uses: actions/upload-artifact@v4
+        with:
+          name: apk
+          path: build/app/outputs/flutter-apk/app-release.apk
+          retention-days: 1
+
+  windows:
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - run: flutter config --enable-windows-desktop
+      - run: flutter pub get
+      - run: flutter build windows --release
+      - name: Zip
+        shell: pwsh
+        run: Compress-Archive -Path build\windows\x64\runner\Release\* -DestinationPath 4cus-windows.zip
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows
+          path: 4cus-windows.zip
+          retention-days: 1
+
+  ios:
+    runs-on: macos-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - run: flutter pub get
+      - run: flutter build ios --release --no-codesign
+      - name: Package unsigned .ipa
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf payload && mkdir -p payload
+          cp -R build/ios/iphoneos/Runner.app payload/
+          zip -qry 4cus-unsigned.ipa payload
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ios
+          path: 4cus-unsigned.ipa
+          retention-days: 1
+
+  web:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - run: flutter pub get
+      - run: flutter build web --release
+      - name: Zip the offline web build
+        run: cd build/web && zip -qr 4cus-web.zip .
+      - uses: actions/upload-artifact@v4
+        with:
+          name: web
+          path: build/web/4cus-web.zip
+          retention-days: 1
+
+  publish:
+    needs: [android, windows, ios, web]
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+      - name: Collect assets with stable names
+        shell: bash
+        run: |
+          set -euo pipefail
+          tag="${GITHUB_REF_NAME}"
+          mkdir -p assets
+          cp dist/apk/app-release.apk      "assets/4cus-$tag.apk"
+          cp dist/windows/4cus-windows.zip  "assets/4cus-$tag-windows.zip"
+          cp dist/ios/4cus-unsigned.ipa     "assets/4cus-$tag-unsigned.ipa"
+          cp dist/web/4cus-web.zip          "assets/4cus-$tag-web.zip"
+          ls -la assets
+      - name: Create or update the release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" assets/* --clobber
+            echo "Updated existing release $TAG"
+          else
+            gh release create "$TAG" --title "4cus $TAG" --generate-notes assets/*
+            echo "Created release $TAG"
+          fi

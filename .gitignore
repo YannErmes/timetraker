@@ -46,3 +46,6 @@ app.*.map.json
 
 # Widget Preview related
 .widget_preview/
+
+# The marketing site lives in its own repo (YannErmes/4cus), not here.
+/site/
