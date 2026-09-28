@@ -10,6 +10,7 @@ import '../services/supabase_service.dart';
 import 'monthly_view.dart';
 import '../providers/task_filters.dart';
 import '../providers/column_visibility.dart';
+import 'day_detail_panel.dart';
 import '../models/task.dart';
 import '../models/column_definition.dart';
 import '../models/enums.dart';
@@ -22,6 +23,20 @@ import 'task_pool.dart';
 import 'monthly_view.dart';
 import 'note_editor_panel.dart';
 import 'reminder_dialog.dart';
+
+/// Slight vertical rule that separates one date from the next, drawn in both
+/// the header and the body so the two line up. It replaces the heavy 1.5px day
+/// borders that made the grid look like a form: the same "each date is its own
+/// block" read, but faint enough to stay behind the content. The first day has
+/// nothing to separate from, so it gets no line.
+///
+/// A getter, not a constant: AppColors.border depends on the active theme and
+/// the theme is switched at runtime.
+Color get _dayDividerColor => AppColors.border.withValues(alpha: 0.5);
+
+BoxDecoration? _dayDivider(int di) => di == 0
+    ? null
+    : BoxDecoration(border: Border(left: BorderSide(color: _dayDividerColor, width: 1)));
 
 class WeeklyGrid extends ConsumerStatefulWidget {
   const WeeklyGrid({super.key});
@@ -310,8 +325,9 @@ class _WeeklyGridState extends ConsumerState<WeeklyGrid> {
       width: rightWidth,
       height: headerH,
       child: Row(children: [
-        for (final d in days)
+        for (int di = 0; di < days.length; di++)
           Builder(builder: (_) {
+            final d = days[di];
             final flash = _flashDayKey != null && _dateKey(d) == _flashDayKey;
             return Tooltip(
               message: loc.openDaily(formatDayHeader(d)),
@@ -330,9 +346,12 @@ class _WeeklyGridState extends ConsumerState<WeeklyGrid> {
               // Every border goes on `foregroundDecoration`: a `decoration`
               // border pads the child (1px/side for the today outline), which
               // pushed this day to 414x62 and overflowed the 416-wide row.
+              // The left hairline separates one date from the next; the flash
+              // outline is kept separate because a borderRadius may only be
+              // used with a uniform border.
               foregroundDecoration: flash
                   ? BoxDecoration(borderRadius: BorderRadius.circular(8), border: Border.all(color: AppColors.accent.withValues(alpha: 0.55)))
-                  : null,
+                  : (di == 0 ? null : _dayDivider(di)),
               // Phones get one compact line ("21 Mon"); the full date + the
               // column-label row is what forced 132px columns.
               child: mobile
@@ -606,6 +625,23 @@ class _WeeklyGridState extends ConsumerState<WeeklyGrid> {
     );
   }
 
+  /// One line describing what is already on this task for this day, so the
+  /// sheet can show what the day editor is about to change.
+  String _dayCellSummary(SupabaseService svc, Task task, DateTime day) {
+    final e = svc.entryFor(task.id, day);
+    if (e == null) return '';
+    final parts = <String>[];
+    for (final c in List.of(svc.columns)) {
+      // Status is already shown by the day chip, and free text can be a whole
+      // note: neither belongs in a one-line summary.
+      if (c.type == ColumnType.status || c.type == ColumnType.text) continue;
+      final v = e.valueFor(c.id)?.toString().trim();
+      if (v == null || v.isEmpty) continue;
+      parts.add(v);
+    }
+    return parts.join(' · ');
+  }
+
   /// Tap target on the phone list: schedule the task on any day of the week,
   /// or edit / rename / delete / set a reminder.
   Future<void> _openMobileTaskSheet(BuildContext context, Task task, List<DateTime> days, ColumnDefinition? statusCol) async {
@@ -684,6 +720,44 @@ class _WeeklyGridState extends ConsumerState<WeeklyGrid> {
                       ],
                     ),
                     const SizedBox(height: 14),
+                    // Full editing of the task on a given day. The day chips
+                    // above only answer "is it on that day"; the day panel is
+                    // where status, schedule, duration and notes are edited.
+                    if (days.where((d) {
+                          final e = svc.entryFor(task.id, d);
+                          return e != null && svc.isAssigned(e);
+                        }).isNotEmpty) ...[
+                      Divider(height: 1, color: AppColors.border),
+                      const SizedBox(height: 4),
+                      Padding(
+                        padding: const EdgeInsets.only(top: 6, bottom: 2),
+                        child: Text(loc.editTaskDay, style: TextStyle(fontSize: 11.5, color: AppColors.textSecondary, fontWeight: FontWeight.w700)),
+                      ),
+                      for (final d in days)
+                        Builder(builder: (_) {
+                          final e = svc.entryFor(task.id, d);
+                          if (e == null || !svc.isAssigned(e)) return const SizedBox.shrink();
+                          final summary = _dayCellSummary(svc, task, d);
+                          return ListTile(
+                            dense: true,
+                            contentPadding: EdgeInsets.zero,
+                            leading: Icon(Icons.tune_rounded, size: 18, color: AppColors.textSecondary),
+                            title: Text(
+                              '${_cap(_weekdayShort(d))} ${d.day}',
+                              style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: AppColors.textPrimary),
+                            ),
+                            subtitle: summary.isEmpty
+                                ? null
+                                : Text(summary, style: TextStyle(fontSize: 11, color: AppColors.textSecondary), maxLines: 1, overflow: TextOverflow.ellipsis),
+                            trailing: Icon(Icons.chevron_right_rounded, size: 18, color: AppColors.textSecondary),
+                            onTap: () {
+                              Navigator.pop(sheetCtx);
+                              showDayDetail(context, d);
+                            },
+                          );
+                        }),
+                    ],
+                    const SizedBox(height: 8),
                     Divider(height: 1, color: AppColors.border),
                     Row(children: [
                       TextButton.icon(
@@ -1006,7 +1080,11 @@ class _RightTaskRowState extends ConsumerState<_RightTaskRow> {
               final flash = widget.flashDayKey != null && _dateKey(d) == widget.flashDayKey;
               final flashBg = flash ? AppColors.accent.withValues(alpha: 0.07) : null;
               final sc = _statusCol;
-              return Row(mainAxisSize: MainAxisSize.min, children: [
+              // Same hairline as the header, on the left of every day but the
+              // first, so both sections read as one table.
+              return Container(
+                foregroundDecoration: _dayDivider(di),
+                child: Row(mainAxisSize: MainAxisSize.min, children: [
                 if (widget.showToggle)
                   Container(
                       width: 48,
@@ -1032,7 +1110,8 @@ class _RightTaskRowState extends ConsumerState<_RightTaskRow> {
                       decoration: BoxDecoration(color: flashBg),
                       alignment: Alignment.center,
                       child: _Cell(taskId: task.id, date: d, col: cols[ci], mobile: widget.mobile)),
-              ]);
+                ]),
+              );
             }),
           ],
         ]),

@@ -8,6 +8,7 @@ import '../config/google_config.dart';
 import '../models/task.dart';
 import '../models/day_entry.dart';
 import 'identity_service.dart';
+import 'desktop_google_auth.dart';
 
 const _kAutoSyncKey = 'google_auto_sync';
 const _kGoogleEventPrefix = '__gcal_event_id_';
@@ -31,14 +32,23 @@ class GoogleCalendarService {
   static final GoogleCalendarService instance = GoogleCalendarService._();
   GoogleCalendarService._();
 
+  /// Windows has no `google_sign_in` implementation, so the EXE signs in with
+  /// the browser loopback flow instead. Everywhere else this is false and the
+  /// plugin is used exactly as before.
+  bool get _usesLoopbackFlow => canUseDesktopGoogleFlow;
+
   bool get isSupported => true;
 
   Future<bool> isConnected() async {
+    if (_usesLoopbackFlow) {
+      return (await desktopGoogleCredentials()) != null;
+    }
     final acc = await _googleSignIn.signInSilently();
     return acc != null;
   }
 
   Future<String?> getConnectedEmail() async {
+    if (_usesLoopbackFlow) return desktopGoogleEmail();
     final acc = await _googleSignIn.signInSilently();
     return acc?.email;
   }
@@ -69,6 +79,13 @@ class GoogleCalendarService {
       throw Exception('VIP key required');
     }
     try {
+      if (_usesLoopbackFlow) {
+        // The customer's browser does the consent, then a local web server
+        // catches the code. Same outcome, no plugin involved.
+        final tokens = await desktopGoogleSignIn(scope: CalendarApi.calendarScope);
+        if (tokens != null) await setAutoSync(true);
+        return null; // no GoogleSignInAccount on this path
+      }
       final acc = await _googleSignIn.signIn();
       if (acc != null) {
         // enable auto sync by default on connect
@@ -83,13 +100,22 @@ class GoogleCalendarService {
 
   Future<void> disconnect() async {
     try {
-      await _googleSignIn.signOut();
-      await _googleSignIn.disconnect();
+      if (_usesLoopbackFlow) {
+        await desktopGoogleSignOut();
+      } else {
+        await _googleSignIn.signOut();
+        await _googleSignIn.disconnect();
+      }
     } catch (_) {}
     await setAutoSync(false);
   }
 
   Future<CalendarApi?> _getCalendarApi() async {
+    if (_usesLoopbackFlow) {
+      // Built in the platform file: it needs dart:io, which the web build
+      // must not see.
+      return desktopGoogleCalendarApi();
+    }
     final acc = await _googleSignIn.signInSilently();
     if (acc == null) return null;
     final client = await _googleSignIn.authenticatedClient();

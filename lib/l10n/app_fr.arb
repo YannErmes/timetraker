@@ -40,6 +40,7 @@
   "allTasksLbl": "Toutes les tâches",
   "tapToSchedule": "Touchez un jour pour y planifier la tâche",
   "notScheduledShort": "non planifiée",
+  "editTaskDay": "Modifier cette journee",
   "typeLbl": "Type",
   "prevBtn": "Préc.",
   "nextBtn": "Suiv.",

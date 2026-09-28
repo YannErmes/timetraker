@@ -50,9 +50,12 @@ class _TrackerAppState extends ConsumerState<TrackerApp> {
       await identity.init();
       final svc = ref.read(supabaseServiceProvider);
       await svc.init();
-      // Device-level custom background (for the Custom theme).
-      ref.read(customBgBytesProvider.notifier).state = await CustomBg.load();
-      ref.read(customBgBrightnessProvider.notifier).state = await CustomBg.loadBrightness();
+      // Custom-theme background. Resolved across the device cache and the
+      // user's cloud copy, so the photo follows the customer to any other
+      // device where they sign in with the same name.
+      final bg = await CustomBg.resolveForUser(svc);
+      ref.read(customBgBytesProvider.notifier).state = bg.bytes;
+      ref.read(customBgBrightnessProvider.notifier).state = bg.brightness;
       if (mounted) setState(() => _init = true);
     });
   }

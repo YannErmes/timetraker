@@ -182,7 +182,9 @@ class _CustomBgSectionState extends ConsumerState<_CustomBgSection> {
     try {
       final bytes = await CustomBg.pick();
       if (bytes == null) return;
-      final persisted = await CustomBg.save(bytes);
+      // Writes this device and the user's cloud copy, so the picture is there
+      // on the next machine they sign in on.
+      final persisted = await CustomBg.saveForUser(ref.read(supabaseServiceProvider), bytes);
       ref.read(customBgBytesProvider.notifier).state = bytes;
       // Picking an image from a plain theme would look like nothing happened,
       // so switch to a Custom base right away.
@@ -239,7 +241,7 @@ class _CustomBgSectionState extends ConsumerState<_CustomBgSection> {
                   const SizedBox(width: 6),
                   TextButton(
                     onPressed: () async {
-                      await CustomBg.clear();
+                      await CustomBg.clearForUser(ref.read(supabaseServiceProvider));
                       ref.read(customBgBytesProvider.notifier).state = null;
                     },
                     style: TextButton.styleFrom(padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6), minimumSize: Size.zero, tapTargetSize: MaterialTapTargetSize.shrinkWrap),
@@ -264,7 +266,7 @@ class _CustomBgSectionState extends ConsumerState<_CustomBgSection> {
           divisions: 17,
           activeColor: AppColors.accent,
           onChanged: (v) => ref.read(customBgBrightnessProvider.notifier).state = v,
-          onChangeEnd: (v) => CustomBg.saveBrightness(v),
+          onChangeEnd: (v) => CustomBg.saveBrightnessForUser(ref.read(supabaseServiceProvider), v),
         ),
       ]),
     );

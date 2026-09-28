@@ -127,6 +127,9 @@ class AppLocalizationsFr extends AppLocalizations {
   String get notScheduledShort => 'non planifiée';
 
   @override
+  String get editTaskDay => 'Modifier cette journee';
+
+  @override
   String get typeLbl => 'Type';
 
   @override

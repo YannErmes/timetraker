@@ -174,3 +174,19 @@ create index if not exists idx_reminders_due on public.reminders(status, fire_at
 do $$ begin
   alter publication supabase_realtime add table public.reminders;
 exception when others then null; end $$;
+
+-- 6. Per-user settings: the Custom-theme background photo and its dimming.
+-- Keyed by the same app_users id the rest of the app filters on, so the photo
+-- follows a customer to any other device where they sign in with the same
+-- name. One row per user (user_id is the primary key) and the newest write
+-- wins: the client stores updated_at locally and only uploads a local photo
+-- if it is newer than the one in the cloud.
+create table if not exists public.user_settings (
+  user_id uuid primary key references public.app_users(id) on delete cascade,
+  background_b64 text,
+  background_brightness real,
+  updated_at timestamp with time zone not null default now()
+);
+alter table public.user_settings enable row level security;
+drop policy if exists "Allow all user_settings" on public.user_settings;
+create policy "Allow all user_settings" on public.user_settings for all using (true) with check (true);

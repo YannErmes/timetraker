@@ -40,6 +40,7 @@
   "allTasksLbl": "All tasks",
   "tapToSchedule": "Tap a day to put it there",
   "notScheduledShort": "not scheduled",
+  "editTaskDay": "Edit this day",
   "typeLbl": "Type",
   "prevBtn": "Prev",
   "nextBtn": "Next",

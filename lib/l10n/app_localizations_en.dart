@@ -127,6 +127,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get notScheduledShort => 'not scheduled';
 
   @override
+  String get editTaskDay => 'Edit this day';
+
+  @override
   String get typeLbl => 'Type';
 
   @override

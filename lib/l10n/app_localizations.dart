@@ -323,6 +323,12 @@ abstract class AppLocalizations {
   /// **'not scheduled'**
   String get notScheduledShort;
 
+  /// No description provided for @editTaskDay.
+  ///
+  /// In en, this message translates to:
+  /// **'Edit this day'**
+  String get editTaskDay;
+
   /// No description provided for @typeLbl.
   ///
   /// In en, this message translates to:

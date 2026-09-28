@@ -16,6 +16,16 @@ import 'notification_service.dart';
 
 const _uuid = Uuid();
 
+/// One row of `user_settings`: the Custom-theme photo (base64 JPEG) and the
+/// dimming applied over it. [updatedAt] is the photo's own timestamp.
+class CloudUserSettings {
+  final String? backgroundB64;
+  final double? brightness;
+  final DateTime? updatedAt;
+  const CloudUserSettings({this.backgroundB64, this.brightness, this.updatedAt});
+  bool get hasPhoto => backgroundB64 != null && backgroundB64!.isNotEmpty;
+}
+
 /// System-locale fallback names for notifications (no BuildContext here).
 bool get _isFr {
   try {
@@ -330,6 +340,86 @@ class SupabaseService {
     _tasks = (res as List).map((j) => Task.fromSupabase(Map<String, dynamic>.from(j))).toList();
     _tasksCtrl.add(_tasks);
     _schedulePersist();
+  }
+
+  // --- Per-user settings (Custom-theme background) ---------------------------
+  //
+  // The photo is stored as base64 in a single row keyed by the same
+  // app_users id the rest of the app filters on, so it follows a customer to
+  // any other device where they sign in with the same name.
+  //
+  // `updated_at` is the *photo's* timestamp, not the row's: a brightness tweak
+  // must not make a stale cloud photo look newer than the one on this device,
+  // which is how a photo would silently disappear.
+
+  /// Cloud copy of the settings row, or null when there is none / no network /
+  /// the table has not been created yet. Never throws: the Custom theme has to
+  /// keep working on a device that cannot reach the cloud.
+  Future<CloudUserSettings?> fetchUserSettings() async {
+    if (!isConfigured || userId == null) return null;
+    try {
+      final res = await _client!.from('user_settings').select().eq('user_id', userId!).limit(1);
+      final rows = res as List;
+      if (rows.isEmpty) return null;
+      final j = Map<String, dynamic>.from(rows.first);
+      return CloudUserSettings(
+        backgroundB64: j['background_b64'] as String?,
+        brightness: (j['background_brightness'] as num?)?.toDouble(),
+        updatedAt: DateTime.tryParse('${j['updated_at'] ?? ''}')?.toUtc(),
+      );
+    } catch (e) {
+      debugPrint('user settings fetch failed: $e');
+      return null;
+    }
+  }
+
+  /// Uploads the photo. Merge-duplicate upsert on the user_id primary key, so
+  /// this is a create-or-replace of just the photo columns and never touches
+  /// the brightness the customer set on another device.
+  Future<bool> saveUserBackground(String base64Image) async {
+    if (!isConfigured || userId == null) return false;
+    try {
+      await _client!.from('user_settings').upsert({
+        'user_id': userId,
+        'background_b64': base64Image,
+        'updated_at': DateTime.now().toUtc().toIso8601String(),
+      }, onConflict: 'user_id');
+      return true;
+    } catch (e) {
+      debugPrint('user background upload failed: $e');
+      return false;
+    }
+  }
+
+  /// Brightness only: `updated_at` is deliberately left alone so this cannot
+  /// out-rank the photo timestamp (see the note above).
+  Future<bool> saveUserBrightness(double v) async {
+    if (!isConfigured || userId == null) return false;
+    try {
+      await _client!.from('user_settings').upsert({
+        'user_id': userId,
+        'background_brightness': v,
+      }, onConflict: 'user_id');
+      return true;
+    } catch (e) {
+      debugPrint('user brightness upload failed: $e');
+      return false;
+    }
+  }
+
+  /// Removes the cloud photo and the cloud dimming, so signing in on another
+  /// device does not bring a picture back that the customer just deleted.
+  Future<bool> clearUserSettings() async {
+    if (!isConfigured || userId == null) return false;
+    try {
+      await _client!.from('user_settings')
+          .update({'background_b64': null, 'background_brightness': null, 'updated_at': DateTime.now().toUtc().toIso8601String()})
+          .eq('user_id', userId!);
+      return true;
+    } catch (e) {
+      debugPrint('user settings clear failed: $e');
+      return false;
+    }
   }
 
   Future<void> _fetchColumns() async {
