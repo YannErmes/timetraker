@@ -24,6 +24,24 @@ class HomeScreen extends ConsumerStatefulWidget {
 
 class _HomeScreenState extends ConsumerState<HomeScreen> {
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
+  bool _mobileDefaultApplied = false;
+
+  @override
+  void initState() {
+    super.initState();
+    // Phones and tablets open on the day view, on today. The grid views are a
+    // desktop thing; on a small screen "what is happening now" is the question
+    // people actually have when they open the app.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || _mobileDefaultApplied) return;
+      final w = MediaQuery.of(context).size.width;
+      if (w >= 700) return;
+      _mobileDefaultApplied = true;
+      final now = DateTime.now();
+      ref.read(selectedDateProvider.notifier).state = DateTime(now.year, now.month, now.day);
+      ref.read(viewModeProvider.notifier).state = ViewMode.daily;
+    });
+  }
 
   void _openColumnManager() {
     // Clear any note request so the drawer shows columns, not the editor.

@@ -140,6 +140,53 @@ class CompactStatusIcon extends ConsumerWidget {
   }
 }
 
+/// Soft status chip for the weekly grid: a tinted background and the status
+/// word, with no border and no dropdown arrow. Tapping opens the full editor.
+/// Users reported the bordered dropdown cells as far too high-contrast, so the
+/// weekly grid reads as a calm table instead of a wall of boxes.
+class SoftStatusPill extends ConsumerWidget {
+  final String taskId;
+  final DateTime date;
+  final ColumnDefinition col;
+  final dynamic rawValue;
+  final String title;
+  const SoftStatusPill({super.key, required this.taskId, required this.date, required this.col, required this.rawValue, required this.title});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final valueId = rawValue as String?;
+    final dot = statusDotColor(valueId, col.statusOptions);
+    final fallbackId = col.statusOptions.any((o) => o.id == 'idle') ? 'idle' : 'none';
+    final label = (() {
+      try {
+        return col.statusOptions.firstWhere((o) => o.id == (valueId ?? fallbackId)).label;
+      } catch (_) {
+        return valueId ?? fallbackId;
+      }
+    })();
+    return Tooltip(
+      message: title,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(7),
+        onTap: () => showCellEditorDialog(
+          context,
+          title: title,
+          editor: StatusCell(
+            valueId: valueId,
+            options: col.statusOptions,
+            onChanged: (v) => ref.read(supabaseServiceProvider).setCellValue(taskId, date, col.id, v),
+          ),
+        ),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
+          decoration: BoxDecoration(color: dot.withValues(alpha: 0.13), borderRadius: BorderRadius.circular(7)),
+          child: Text(label, style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w600, color: dot), maxLines: 1, overflow: TextOverflow.ellipsis),
+        ),
+      ),
+    );
+  }
+}
+
 /// 32px status dot button (replaces the scheduling checkbox).
 /// Tap opens the full status editor; idle means unassigned for the day.
 class StatusDotButton extends ConsumerWidget {

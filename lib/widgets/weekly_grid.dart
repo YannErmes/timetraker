@@ -188,6 +188,14 @@ class _WeeklyGridState extends ConsumerState<WeeklyGrid> {
     if (_rowPage < 0) _rowPage = 0;
     final tasks = rowsVisible == 0 ? allTasks : allTasks.skip(_rowPage * rowsVisible).take(rowsVisible).toList();
 
+    // On a phone the weekly grid is replaced by a plain list of every task,
+    // scheduled or not: a 7-day spreadsheet cannot be read at 400px, and the
+    // only thing a phone needs from "weekly" is "what do I have, and when is
+    // it happening". Tapping a task opens a sheet to schedule or edit it.
+    if (MediaQuery.of(context).size.width < 600) {
+      return _buildMobileTaskList(context, svc, allTasks, allCols);
+    }
+
     return Container(
       color: AppColors.bg,
       child: Column(children: [
@@ -293,7 +301,6 @@ class _WeeklyGridState extends ConsumerState<WeeklyGrid> {
     // +2px slack so sub-pixel/border accumulation can never trip an overflow.
     final rightWidth = days.length * dayWidth + 2;
     // Contrasted divider between day blocks (header mirrors the body rows).
-    final dayEdge = BorderSide(color: AppColors.textSecondary.withValues(alpha: 0.45), width: 1.5);
     final totalTableWidth = taskColWidth + rightWidth;
     final headerH = mobile ? 44.0 : 64.0;
     final rowH = mobile ? 44.0 : 48.0;
@@ -325,7 +332,7 @@ class _WeeklyGridState extends ConsumerState<WeeklyGrid> {
               // pushed this day to 414x62 and overflowed the 416-wide row.
               foregroundDecoration: flash
                   ? BoxDecoration(borderRadius: BorderRadius.circular(8), border: Border.all(color: AppColors.accent.withValues(alpha: 0.55)))
-                  : BoxDecoration(border: Border(right: dayEdge)),
+                  : null,
               // Phones get one compact line ("21 Mon"); the full date + the
               // column-label row is what forced 132px columns.
               child: mobile
@@ -510,6 +517,212 @@ class _WeeklyGridState extends ConsumerState<WeeklyGrid> {
     ]);
   }
 
+  /// Phone version of the weekly page: every task in one list, with a small
+  /// dot per day of the current week showing where it is scheduled.
+  Widget _buildMobileTaskList(BuildContext context, svc, List<Task> tasks, List<ColumnDefinition> allCols) {
+    final t = AppLocalizations.of(context)!;
+    final days = weekDates(ref.watch(selectedDateProvider));
+    final statusCol = allCols.where((c) => c.type == ColumnType.status).firstOrNull;
+    if (tasks.isEmpty) {
+      return Container(
+        color: AppColors.bg,
+        child: Center(
+          child: Column(mainAxisSize: MainAxisSize.min, children: [
+            Icon(Icons.checklist_rounded, size: 30, color: AppColors.textSecondary),
+            const SizedBox(height: 10),
+            Text(t.noTasksYet, style: TextStyle(color: AppColors.textSecondary, fontWeight: FontWeight.w600)),
+          ]),
+        ),
+      );
+    }
+    return Container(
+      color: AppColors.bg,
+      child: Column(children: [
+        Container(
+          color: AppColors.header,
+          padding: const EdgeInsets.fromLTRB(14, 10, 8, 10),
+          child: Row(children: [
+            Text(t.allTasksLbl, style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: AppColors.textPrimary)),
+            const SizedBox(width: 8),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+              decoration: BoxDecoration(color: AppColors.inputFill, borderRadius: BorderRadius.circular(999)),
+              child: Text('${tasks.length}', style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w700, color: AppColors.textSecondary)),
+            ),
+            const Spacer(),
+            IconButton(
+              icon: Icon(Icons.add_rounded, size: 20, color: AppColors.accent),
+              tooltip: t.addTask,
+              onPressed: () => _addTaskDialog(context),
+            ),
+          ]),
+        ),
+        Divider(height: 1, color: AppColors.border.withValues(alpha: 0.7)),
+        Expanded(
+          child: ListView.separated(
+            padding: const EdgeInsets.only(bottom: 90),
+            itemCount: tasks.length,
+            separatorBuilder: (_, __) => Divider(height: 1, color: AppColors.border.withValues(alpha: 0.5)),
+            itemBuilder: (_, i) {
+              final task = tasks[i];
+              return InkWell(
+                onTap: () => _openMobileTaskSheet(context, task, days, statusCol),
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(14, 12, 10, 12),
+                  child: Row(children: [
+                    Expanded(
+                      child: Text(
+                        task.name.isEmpty ? t.untitledCap : task.name,
+                        style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: AppColors.textPrimary),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    // Which days of this week it is on, at a glance.
+                    for (final d in days)
+                      Builder(builder: (_) {
+                        final e = svc.entryFor(task.id, d);
+                        final on = e != null && svc.isAssigned(e);
+                        return Container(
+                          width: 7,
+                          height: 7,
+                          margin: const EdgeInsets.only(left: 4),
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            color: on ? AppColors.accent : AppColors.border,
+                          ),
+                        );
+                      }),
+                    const SizedBox(width: 6),
+                    Icon(Icons.chevron_right_rounded, size: 18, color: AppColors.textSecondary),
+                  ]),
+                ),
+              );
+            },
+          ),
+        ),
+      ]),
+    );
+  }
+
+  /// Tap target on the phone list: schedule the task on any day of the week,
+  /// or edit / rename / delete / set a reminder.
+  Future<void> _openMobileTaskSheet(BuildContext context, Task task, List<DateTime> days, ColumnDefinition? statusCol) async {
+    final loc = AppLocalizations.of(context)!;
+    final svc = ref.read(supabaseServiceProvider);
+    await showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: AppColors.surface,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(18))),
+      builder: (sheetCtx) {
+        return StatefulBuilder(
+          builder: (ctx, setSheet) {
+            return SafeArea(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(children: [
+                      Expanded(
+                        child: Text(
+                          task.name.isEmpty ? loc.untitledCap : task.name,
+                          style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: AppColors.textPrimary),
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      IconButton(icon: Icon(Icons.close_rounded, size: 18, color: AppColors.textSecondary), onPressed: () => Navigator.pop(sheetCtx)),
+                    ]),
+                    const SizedBox(height: 4),
+                    Text(loc.tapToSchedule, style: TextStyle(fontSize: 11.5, color: AppColors.textSecondary)),
+                    const SizedBox(height: 10),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: [
+                        for (final d in days)
+                          Builder(builder: (_) {
+                            final e = svc.entryFor(task.id, d);
+                            final on = e != null && svc.isAssigned(e);
+                            final isToday = _dateKey(d) == _dateKey(DateTime.now());
+                            return InkWell(
+                              borderRadius: BorderRadius.circular(9),
+                              onTap: () {
+                                if (statusCol != null) {
+                                  // Status drives the assignment: none = on, idle = off.
+                                  svc.setCellValue(task.id, d, statusCol.id, on ? 'idle' : 'none');
+                                } else {
+                                  svc.toggleChecked(task.id, d, !on);
+                                }
+                                setSheet(() {});
+                              },
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                                decoration: BoxDecoration(
+                                  color: on ? AppColors.accent : AppColors.inputFill,
+                                  borderRadius: BorderRadius.circular(9),
+                                  border: isToday ? Border.all(color: AppColors.accent.withValues(alpha: 0.5)) : null,
+                                ),
+                                child: Column(mainAxisSize: MainAxisSize.min, children: [
+                                  Text(
+                                    '${_weekdayShort(d)} ${d.day}',
+                                    style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: on ? Colors.white : AppColors.textPrimary),
+                                  ),
+                                  const SizedBox(height: 2),
+                                  Text(
+                                    on ? loc.doneSection.toLowerCase() : loc.notScheduledShort,
+                                    style: TextStyle(fontSize: 9.5, color: on ? Colors.white70 : AppColors.textSecondary),
+                                  ),
+                                ]),
+                              ),
+                            );
+                          }),
+                      ],
+                    ),
+                    const SizedBox(height: 14),
+                    Divider(height: 1, color: AppColors.border),
+                    Row(children: [
+                      TextButton.icon(
+                        icon: const Icon(Icons.notifications_outlined, size: 16),
+                        label: Text(loc.setReminderItem, style: const TextStyle(fontSize: 12.5)),
+                        onPressed: () {
+                          Navigator.pop(sheetCtx);
+                          showReminderDialog(context, task);
+                        },
+                      ),
+                      const Spacer(),
+                      TextButton.icon(
+                        icon: const Icon(Icons.edit_outlined, size: 16),
+                        label: Text(loc.rename, style: const TextStyle(fontSize: 12.5)),
+                        onPressed: () {
+                          Navigator.pop(sheetCtx);
+                          _renameTask(context, task);
+                        },
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.delete_outline_rounded, size: 18),
+                        color: const Color(0xFFF43F5E),
+                        tooltip: loc.delete,
+                        onPressed: () {
+                          Navigator.pop(sheetCtx);
+                          svc.deleteTask(task.id);
+                        },
+                      ),
+                    ]),
+                  ],
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
   List<Task> _applyFilters(List<Task> tasks, svc, List<ColumnDefinition> cols, TaskFilters f) {
     if (f.search.isEmpty && f.status == null && !f.hasNoteOnly && f.tag == null) return tasks;
     final statusCol = cols.where((c) => c.type == ColumnType.status).firstOrNull;
@@ -627,8 +840,8 @@ class _LeftTaskCellState extends ConsumerState<_LeftTaskCell> {
     final loc = AppLocalizations.of(context)!;
     final task = widget.task;
     final hovered = widget.hovered;
-    final rowBg = widget.isAlt ? AppColors.surfaceAlt : AppColors.surface;
-    final bg = hovered ? Color.alphaBlend(AppColors.accent.withValues(alpha: 0.12), rowBg) : rowBg;
+    final rowBg = AppColors.surface;
+    final bg = hovered ? Color.alphaBlend(AppColors.accent.withValues(alpha: 0.07), rowBg) : rowBg;
     final hoverSide = BorderSide(color: AppColors.accent, width: 1.5);
     // Note count for the menu label.
     final allCols = List.of(svc.columns)..sort((a, b) => a.position.compareTo(b.position));
@@ -765,8 +978,11 @@ class _RightTaskRowState extends ConsumerState<_RightTaskRow> {
     final days = widget.days;
     final cols = widget.cols;
     final hovered = widget.hovered;
-    final rowBg = widget.isAlt ? AppColors.surfaceAlt : AppColors.surface;
-    final bg = hovered ? Color.alphaBlend(AppColors.accent.withValues(alpha: 0.12), rowBg) : rowBg;
+    // Soft table: no alternating fill and no vertical rules. A customer
+    // reported the boxed, high-contrast cells as hard to read, so the only
+    // lines left are the faint row separators.
+    final rowBg = AppColors.surface;
+    final bg = hovered ? Color.alphaBlend(AppColors.accent.withValues(alpha: 0.07), rowBg) : rowBg;
     final hoverSide = BorderSide(color: AppColors.accent, width: 1.5);
     return MouseRegion(
       onEnter: (_) => widget.onHover(true),
@@ -778,21 +994,18 @@ class _RightTaskRowState extends ConsumerState<_RightTaskRow> {
         // right edge would shrink the row and overflow the day cells.
         foregroundDecoration: BoxDecoration(
           border: Border(
-            bottom: hovered ? hoverSide : BorderSide(color: AppColors.border, width: 1),
+            bottom: hovered ? hoverSide : BorderSide(color: AppColors.border.withValues(alpha: 0.6), width: 1),
             top: hovered ? hoverSide : BorderSide.none,
             right: hovered ? hoverSide : BorderSide.none,
           ),
         ),
         child: Row(children: [
-          // Stronger divider at each day boundary so days never blend together.
           for (int di = 0; di < days.length; di++) ...[
             Builder(builder: (_) {
               final d = days[di];
               final flash = widget.flashDayKey != null && _dateKey(d) == widget.flashDayKey;
-              final flashBg = flash ? AppColors.accent.withValues(alpha: 0.12) : null;
+              final flashBg = flash ? AppColors.accent.withValues(alpha: 0.07) : null;
               final sc = _statusCol;
-              final dayEdge = BorderSide(color: AppColors.textSecondary.withValues(alpha: 0.45), width: 1.5);
-              final innerEdge = BorderSide(color: AppColors.border);
               return Row(mainAxisSize: MainAxisSize.min, children: [
                 if (widget.showToggle)
                   Container(
@@ -800,9 +1013,6 @@ class _RightTaskRowState extends ConsumerState<_RightTaskRow> {
                       height: widget.rowH,
                       alignment: Alignment.center,
                       decoration: BoxDecoration(color: flashBg),
-                      // Painted over the child, so the 1.5px line never eats
-                      // into the cell width and overflows the row.
-                      foregroundDecoration: BoxDecoration(border: Border(left: dayEdge)),
                       child: Builder(builder: (_) {
                         final e = svc.entryFor(task.id, d);
                         final raw = sc == null ? null : e?.data[sc.id];
@@ -818,9 +1028,8 @@ class _RightTaskRowState extends ConsumerState<_RightTaskRow> {
                   Container(
                       width: _widthFor(cols[ci]),
                       height: widget.rowH,
-                      padding: EdgeInsets.symmetric(horizontal: widget.mobile ? 3 : 6, vertical: 8),
+                      padding: EdgeInsets.symmetric(horizontal: widget.mobile ? 3 : 10, vertical: 8),
                       decoration: BoxDecoration(color: flashBg),
-                      foregroundDecoration: BoxDecoration(border: Border(left: (ci == 0 && !widget.showToggle) ? dayEdge : innerEdge)),
                       alignment: Alignment.center,
                       child: _Cell(taskId: task.id, date: d, col: cols[ci], mobile: widget.mobile)),
               ]);
@@ -853,10 +1062,9 @@ class _Cell extends ConsumerWidget {
       case ColumnType.schedule:
         return ScheduleCell(value: raw as String?, onChanged: (v) => svc.setCellValue(taskId, date, col.id, v));
       case ColumnType.status:
-        if (basic) {
-          return CompactStatusIcon(taskId: taskId, date: date, col: col, rawValue: raw, title: loc.editColLabel(col.label));
-        }
-        return StatusCell(valueId: raw as String?, options: col.statusOptions, onChanged: (v) => svc.setCellValue(taskId, date, col.id, v));
+        // Soft tinted pill instead of a bordered dropdown: the old cell was
+        // the main source of contrast complaints on the weekly page.
+        return SoftStatusPill(taskId: taskId, date: date, col: col, rawValue: raw, title: loc.editColLabel(col.label));
       case ColumnType.number:
         return DurationCell(value: raw as String?, onChanged: (v) => svc.setCellValue(taskId, date, col.id, v));
       case ColumnType.text:

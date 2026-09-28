@@ -118,6 +118,15 @@ class AppLocalizationsEn extends AppLocalizations {
   String get daysLbl => 'Days';
 
   @override
+  String get allTasksLbl => 'All tasks';
+
+  @override
+  String get tapToSchedule => 'Tap a day to put it there';
+
+  @override
+  String get notScheduledShort => 'not scheduled';
+
+  @override
   String get typeLbl => 'Type';
 
   @override

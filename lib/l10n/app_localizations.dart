@@ -305,6 +305,24 @@ abstract class AppLocalizations {
   /// **'Days'**
   String get daysLbl;
 
+  /// No description provided for @allTasksLbl.
+  ///
+  /// In en, this message translates to:
+  /// **'All tasks'**
+  String get allTasksLbl;
+
+  /// No description provided for @tapToSchedule.
+  ///
+  /// In en, this message translates to:
+  /// **'Tap a day to put it there'**
+  String get tapToSchedule;
+
+  /// No description provided for @notScheduledShort.
+  ///
+  /// In en, this message translates to:
+  /// **'not scheduled'**
+  String get notScheduledShort;
+
   /// No description provided for @typeLbl.
   ///
   /// In en, this message translates to:

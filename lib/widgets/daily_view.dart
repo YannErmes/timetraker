@@ -149,8 +149,12 @@ class _DailyViewState extends ConsumerState<DailyView> {
             Row(children: [
               Icon(Icons.insights_rounded, size: 14, color: AppColors.accent),
               const SizedBox(width: 6),
-              Text(loc.statsFor(dayLabel), style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: AppColors.textPrimary)),
-              const Spacer(),
+              // Flexible: a long "Stats for friday 9/27/2026" used to overflow
+              // the row on narrow phones instead of ellipsing.
+              Flexible(
+                child: Text(loc.statsFor(dayLabel), style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: AppColors.textPrimary), maxLines: 1, overflow: TextOverflow.ellipsis),
+              ),
+              const SizedBox(width: 8),
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                 decoration: BoxDecoration(color: pct >= 1 ? AppColors.doneFill : AppColors.inputFill, borderRadius: BorderRadius.circular(8), border: Border.all(color: pct >= 1 ? AppColors.doneBorder : AppColors.border)),
