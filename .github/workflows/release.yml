@@ -125,10 +125,21 @@ jobs:
           TAG: ${{ github.ref_name }}
         run: |
           set -euo pipefail
+          # Named explicitly: `assets/*` would also glob the repository's own
+          # assets/ directory now that this job checks out the repo.
+          files=(
+            "assets/4cus-$TAG.apk"
+            "assets/4cus-$TAG-windows.zip"
+            "assets/4cus-$TAG-unsigned.ipa"
+            "assets/4cus-$TAG-web.zip"
+          )
+          for f in "${files[@]}"; do
+            if [ ! -f "$f" ]; then echo "missing $f" >&2; exit 1; fi
+          done
           if gh release view "$TAG" >/dev/null 2>&1; then
-            gh release upload "$TAG" assets/* --clobber
+            gh release upload "$TAG" "${files[@]}" --clobber
             echo "Updated existing release $TAG"
           else
-            gh release create "$TAG" --title "4cus $TAG" --generate-notes assets/*
+            gh release create "$TAG" --title "4cus $TAG" --generate-notes "${files[@]}"
             echo "Created release $TAG"
           fi
