@@ -1,0 +1,29 @@
+# syntax=docker/dockerfile:1
+
+# A second, leaner Dockerfile for local work: rebuilds on every source change
+# with a warm pub cache, and is what you want while iterating.
+#
+#   docker build -f Dockerfile.dev -t 4cus-web:dev .
+#   docker run -d -p 8080:80 4cus-web:dev
+#
+# It runs the Dart web server with hot restart instead of nginx, so edits show
+# up on reload. Use the plain Dockerfile for anything you ship.
+
+FROM ghcr.io/cirruslabs/flutter:3.47.4
+
+WORKDIR /app
+
+# Warm the pub cache in its own layer: it survives source edits.
+COPY pubspec.yaml pubspec.lock ./
+RUN flutter pub get
+
+# Now the source. Anything after this line is invalidated by a code change.
+COPY . .
+
+EXPOSE 8080
+
+# Debug build so the browser gets a useful stack trace instead of a minified
+# one, and no tree shaking so the reload is quick.
+CMD ["flutter", "run", "-d", "web-server", \
+     "--web-hostname", "0.0.0.0", \
+     "--web-port", "8080"]

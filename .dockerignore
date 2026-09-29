@@ -1,0 +1,37 @@
+# Build context trim-down. Everything not needed to compile the web bundle is
+# excluded here, so a local `docker build` does not ship build outputs, the
+# whole platform runner directories, or your git history into the daemon.
+.git
+.gitignore
+.github
+.idea
+
+# Prebuilt outputs: the image compiles from source, and copying these in would
+# both bloat the context and risk serving stale files.
+build/
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+.packages
+
+# Native runners. The web build never needs them, and they are by far the
+# largest directories in the repo.
+android/
+ios/
+windows/
+macos/
+linux/
+
+# The marketing site is a separate repository and deploys on its own.
+site/
+
+# Local tooling and scratch space.
+tool/
+*.log
+*.iml
+.vscode/
+.idea/
+
+# The Dockerfile and its config stay in; they are needed by the build.
+!Dockerfile
+!docker/
