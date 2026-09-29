@@ -130,6 +130,21 @@ class AppLocalizationsEn extends AppLocalizations {
   String get editTaskDay => 'Edit this day';
 
   @override
+  String get noTagsYet => 'No tags yet. Create your first one below.';
+
+  @override
+  String get newTagLbl => 'New tag';
+
+  @override
+  String get newTagHint => 'e.g. deep work';
+
+  @override
+  String get addBtn => 'Add';
+
+  @override
+  String get tagsHelp => 'A tag can have a colour, or be plain text. Leave the swatch empty for a text tag.';
+
+  @override
   String get typeLbl => 'Type';
 
   @override

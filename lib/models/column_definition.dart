@@ -35,11 +35,24 @@ class StatusOption {
 class TagOption {
   final String id;
   final String label;
+
+  /// The colour the customer picked for this tag, e.g. `#22C55E`.
+  ///
+  /// Empty means "no colour": a plain text tag. Tags come in both kinds, so
+  /// unlike a status there is nothing to fall back to - [hasColor] is the
+  /// whole story, and an uncoloured tag renders as text.
   final String colorHex;
-  const TagOption({required this.id, required this.label, required this.colorHex});
+
+  const TagOption({required this.id, required this.label, this.colorHex = ''});
+
+  bool get hasColor => colorHex.isNotEmpty;
+
   Map<String, dynamic> toJson() => {'id': id, 'label': label, 'colorHex': colorHex};
-  factory TagOption.fromJson(Map<String, dynamic> j) =>
-      TagOption(id: j['id'] as String, label: j['label'] as String, colorHex: j['colorHex'] as String);
+  factory TagOption.fromJson(Map<String, dynamic> j) => TagOption(
+        id: j['id'] as String,
+        label: j['label'] as String,
+        colorHex: (j['colorHex'] as String?) ?? '',
+      );
 }
 
 class ColumnDefinition {

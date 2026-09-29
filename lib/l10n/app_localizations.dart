@@ -329,6 +329,36 @@ abstract class AppLocalizations {
   /// **'Edit this day'**
   String get editTaskDay;
 
+  /// No description provided for @noTagsYet.
+  ///
+  /// In en, this message translates to:
+  /// **'No tags yet. Create your first one below.'**
+  String get noTagsYet;
+
+  /// No description provided for @newTagLbl.
+  ///
+  /// In en, this message translates to:
+  /// **'New tag'**
+  String get newTagLbl;
+
+  /// No description provided for @newTagHint.
+  ///
+  /// In en, this message translates to:
+  /// **'e.g. deep work'**
+  String get newTagHint;
+
+  /// No description provided for @addBtn.
+  ///
+  /// In en, this message translates to:
+  /// **'Add'**
+  String get addBtn;
+
+  /// No description provided for @tagsHelp.
+  ///
+  /// In en, this message translates to:
+  /// **'A tag can have a colour, or be plain text. Leave the swatch empty for a text tag.'**
+  String get tagsHelp;
+
   /// No description provided for @typeLbl.
   ///
   /// In en, this message translates to:

@@ -157,7 +157,7 @@ class AndroidChecklist extends ConsumerWidget {
                                     return Align(alignment: Alignment.centerLeft, child: Checkbox(value: raw == true, onChanged: (v) => svc.setCellValue(t.id, date, col.id, v)));
                                   case ColumnType.tags:
                                     final ids = raw is List ? List<String>.from(raw) : <String>[];
-                                    return TagCell(selectedIds: ids, options: col.tagOptions, onChanged: (v) => svc.setCellValue(t.id, date, col.id, v));
+                                    return TagCell(selectedIds: ids, col: col, onChanged: (v) => svc.setCellValue(t.id, date, col.id, v));
                                   default:
                                     return Text(raw?.toString() ?? '—', style: TextStyle(fontSize: 12, color: AppColors.textPrimary));
                                 }

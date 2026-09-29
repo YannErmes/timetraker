@@ -118,7 +118,7 @@ class DayDetailPanel extends ConsumerWidget {
                                       return Checkbox(value: raw == true, onChanged: (v) => svc.setCellValue(t.id, date, col.id, v));
                                     case ColumnType.tags:
                                       final ids = raw is List ? List<String>.from(raw) : <String>[];
-                                      return TagCell(selectedIds: ids, options: col.tagOptions, onChanged: (v) => svc.setCellValue(t.id, date, col.id, v));
+                                      return TagCell(selectedIds: ids, col: col, onChanged: (v) => svc.setCellValue(t.id, date, col.id, v));
                                     case ColumnType.date:
                                       return InkWell(borderRadius: BorderRadius.circular(8), onTap: () async { final d = await showDatePicker(context: context, initialDate: DateTime.now(), firstDate: DateTime(2020), lastDate: DateTime(2035)); if (d != null) svc.setCellValue(t.id, date, col.id, d.toIso8601String().split('T').first); }, child: Container(padding: EdgeInsets.all(6), decoration: BoxDecoration(color: AppColors.bg, borderRadius: BorderRadius.circular(8), border: Border.all(color: AppColors.inputBorder)), child: Text(raw ?? '—', style: TextStyle(fontSize: 11, color: AppColors.textSecondary))));
                                     case ColumnType.datetime:

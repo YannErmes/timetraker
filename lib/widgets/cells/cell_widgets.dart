@@ -1,7 +1,11 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:tracker_sheet/l10n/app_localizations.dart';
 import '../../config/app_colors.dart';
 import '../../models/column_definition.dart';
+import '../../providers/app_providers.dart';
+import '../column_settings_panel.dart' show ColorPickerDialog;
 
 Color _hex(String hex) {
   var h = hex.replaceAll('#', '');
@@ -184,13 +188,18 @@ class _DurationCellState extends State<DurationCell> {
   }
 }
 
-class TagCell extends StatelessWidget {
+/// Tags on a cell. The picker can also create a tag on the spot, because the
+/// whole point of a tag is to label something immediately - making the user
+/// leave the cell and go to the column settings first is why tags went unused.
+class TagCell extends ConsumerWidget {
   final List<String> selectedIds;
-  final List<TagOption> options;
+  final ColumnDefinition col;
   final ValueChanged<List<String>> onChanged;
-  const TagCell({super.key, required this.selectedIds, required this.options, required this.onChanged});
+  const TagCell({super.key, required this.selectedIds, required this.col, required this.onChanged});
+
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final options = col.tagOptions;
     return Wrap(
       spacing: 6,
       runSpacing: 4,
@@ -198,12 +207,16 @@ class TagCell extends StatelessWidget {
         for (final id in selectedIds)
           Builder(builder: (_) {
             TagOption? o;
-            try {
-              o = options.firstWhere((e) => e.id == id);
-            } catch (_) {}
-            // TagOption, not StatusOption: tags keep their own required colour.
-            final bg = o != null ? _hex(o.colorHex).withValues(alpha: 0.18) : AppColors.inputFill;
-            final border = o != null ? _hex(o.colorHex) : AppColors.border;
+            for (final c in options) {
+              if (c.id == id) {
+                o = c;
+                break;
+              }
+            }
+            // A tag can be plain text (no colour) or a colour tag. An
+            // uncoloured one is a chip with a border, not a tint.
+            final bg = o != null && o.hasColor ? _hex(o.colorHex).withValues(alpha: 0.18) : AppColors.inputFill;
+            final border = o != null && o.hasColor ? _hex(o.colorHex) : AppColors.border;
             return Container(
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
               decoration: BoxDecoration(color: bg, borderRadius: BorderRadius.circular(8), border: Border.all(color: border, width: 1)),
@@ -211,7 +224,7 @@ class TagCell extends StatelessWidget {
             );
           }),
         InkWell(
-          onTap: () => _pick(context),
+          onTap: () => _pick(context, ref),
           borderRadius: BorderRadius.circular(8),
           child: Container(
             padding: const EdgeInsets.all(4),
@@ -223,12 +236,26 @@ class TagCell extends StatelessWidget {
     );
   }
 
-  void _pick(BuildContext context) async {
-    final res = await showDialog<List<String>>(
+  Future<void> _pick(BuildContext context, WidgetRef ref) async {
+    final res = await showDialog<({List<String> selected, List<TagOption> options})>(
       context: context,
-      builder: (_) => _TagPicker(options: options, selected: selectedIds),
+      builder: (_) => _TagPicker(options: col.tagOptions, selected: selectedIds),
     );
-    if (res != null) onChanged(res);
+    if (res == null) return;
+    if (!listEquals(res.options, col.tagOptions)) {
+      // A tag was created or removed: save it on the column, not just in the
+      // cell, or it would vanish the next time the column reloads.
+      final svc = ref.read(supabaseServiceProvider);
+      await svc.updateColumn(ColumnDefinition(
+        id: col.id,
+        label: col.label,
+        type: col.type,
+        position: col.position,
+        config: {...col.config, 'options': res.options.map((e) => e.toJson()).toList()},
+        visibleDays: col.visibleDays,
+      ));
+    }
+    onChanged(res.selected);
   }
 }
 
@@ -242,10 +269,46 @@ class _TagPicker extends StatefulWidget {
 
 class _TagPickerState extends State<_TagPicker> {
   late Set<String> sel;
+  late List<TagOption> options;
+  final _newLabel = TextEditingController();
+  Color? _newColor;
+
   @override
   void initState() {
     super.initState();
     sel = widget.selected.toSet();
+    options = List.of(widget.options);
+  }
+
+  @override
+  void dispose() {
+    _newLabel.dispose();
+    super.dispose();
+  }
+
+  /// Adds the typed tag, coloured if a colour was chosen and plain text if not,
+  /// and selects it straight away.
+  void _create() {
+    final label = _newLabel.text.trim();
+    if (label.isEmpty) return;
+    // A tag that already exists is not duplicated: it is just selected.
+    final existing = options.where((o) => o.label.toLowerCase() == label.toLowerCase()).toList();
+    final TagOption tag;
+    if (existing.isNotEmpty) {
+      tag = existing.first;
+    } else {
+      tag = TagOption(
+        id: 'tag_${DateTime.now().microsecondsSinceEpoch}',
+        label: label,
+        colorHex: _newColor == null ? '' : '#${_newColor!.value.toRadixString(16).padLeft(8, '0').substring(2).toUpperCase()}',
+      );
+      options = [...options, tag];
+    }
+    setState(() {
+      sel.add(tag.id);
+      _newLabel.clear();
+      _newColor = null;
+    });
   }
 
   @override
@@ -255,24 +318,80 @@ class _TagPickerState extends State<_TagPicker> {
       backgroundColor: AppColors.surface,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8), side: BorderSide(color: AppColors.border)),
       title: Text(t.tagsTitle, style: TextStyle(color: AppColors.textPrimary)),
-      content: Wrap(
-        spacing: 6,
-        runSpacing: 6,
-        children: widget.options
-            .map((o) => FilterChip(
-                  label: Text(o.label, style: const TextStyle(fontSize: 12)),
-                  selected: sel.contains(o.id),
-                  backgroundColor: AppColors.inputFill,
-      selectedColor: _hex(o.colorHex).withValues(alpha: 0.25),
-      side: BorderSide(color: sel.contains(o.id) ? _hex(o.colorHex) : AppColors.border),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                  onSelected: (v) => setState(() => v ? sel.add(o.id) : sel.remove(o.id)),
-                ))
-            .toList(),
+      content: SizedBox(
+        width: 340,
+        child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+          if (options.isEmpty)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 10),
+              child: Text(t.noTagsYet, style: TextStyle(fontSize: 12, color: AppColors.textSecondary)),
+            ),
+          ConstrainedBox(
+            constraints: const BoxConstraints(maxHeight: 220),
+            child: SingleChildScrollView(
+              child: Wrap(
+                spacing: 6,
+                runSpacing: 6,
+                children: options
+                    .map((o) => FilterChip(
+                          label: Text(o.label, style: const TextStyle(fontSize: 12)),
+                          selected: sel.contains(o.id),
+                          // A plain text tag has no tint; a colour tag does.
+                          backgroundColor: o.hasColor ? _hex(o.colorHex).withValues(alpha: 0.25) : AppColors.inputFill,
+                          selectedColor: o.hasColor ? _hex(o.colorHex).withValues(alpha: 0.25) : AppColors.inputFill,
+                          side: BorderSide(color: sel.contains(o.id) && o.hasColor ? _hex(o.colorHex) : AppColors.border),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                          onSelected: (v) => setState(() => v ? sel.add(o.id) : sel.remove(o.id)),
+                        ))
+                    .toList(),
+              ),
+            ),
+          ),
+          const SizedBox(height: 14),
+          Divider(height: 1, color: AppColors.border),
+          const SizedBox(height: 12),
+          Text(t.newTagLbl, style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w700, color: AppColors.textSecondary)),
+          const SizedBox(height: 8),
+          Row(children: [
+            // Colour is optional: a tag with no colour is a text tag.
+            GestureDetector(
+              onTap: () async {
+                final c = await showDialog<Color>(context: context, builder: (_) => ColorPickerDialog(initial: _newColor));
+                if (c != null) setState(() => _newColor = c);
+              },
+              child: Container(
+                width: 36,
+                height: 36,
+                decoration: BoxDecoration(
+                  color: _newColor ?? Colors.transparent,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: _newColor == null ? AppColors.textSecondary : AppColors.border, width: _newColor == null ? 1.5 : 1),
+                ),
+                child: _newColor == null ? Icon(Icons.palette_outlined, size: 16, color: AppColors.textSecondary) : null,
+              ),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: TextField(
+                controller: _newLabel,
+                style: TextStyle(color: AppColors.textPrimary, fontSize: 13),
+                decoration: InputDecoration(
+                  isDense: true,
+                  hintText: t.newTagHint,
+                  hintStyle: TextStyle(fontSize: 12, color: AppColors.textSecondary),
+                ),
+                textInputAction: TextInputAction.done,
+                onSubmitted: (_) => _create(),
+              ),
+            ),
+            const SizedBox(width: 8),
+            FilledButton(onPressed: _create, style: FilledButton.styleFrom(padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10)), child: Text(t.addBtn, style: const TextStyle(fontSize: 12))),
+          ]),
+        ]),
       ),
       actions: [
         TextButton(onPressed: () => Navigator.pop(context), child: Text(t.cancel)),
-        FilledButton(onPressed: () => Navigator.pop(context, sel.toList()), child: Text(t.okBtn)),
+        FilledButton(onPressed: () => Navigator.pop(context, (selected: sel.toList(), options: options)), child: Text(t.okBtn)),
       ],
     );
   }

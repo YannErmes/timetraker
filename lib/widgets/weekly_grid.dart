@@ -24,19 +24,11 @@ import 'monthly_view.dart';
 import 'note_editor_panel.dart';
 import 'reminder_dialog.dart';
 
-/// Slight vertical rule that separates one date from the next, drawn in both
-/// the header and the body so the two line up. It replaces the heavy 1.5px day
-/// borders that made the grid look like a form: the same "each date is its own
-/// block" read, but faint enough to stay behind the content. The first day has
-/// nothing to separate from, so it gets no line.
-///
-/// A getter, not a constant: AppColors.border depends on the active theme and
-/// the theme is switched at runtime.
-Color get _dayDividerColor => AppColors.border.withValues(alpha: 0.9);
-
-BoxDecoration? _dayDivider(int di) => di == 0
-    ? null
-    : BoxDecoration(border: Border(left: BorderSide(color: _dayDividerColor, width: 1)));
+/// Space between one date's block of cells and the next, in the same spirit as
+/// the gap between the cards in Daily view. A gap replaced the vertical rule:
+/// empty space separates the days without drawing a line through them, and the
+/// row behind the gap is the page colour, so the gap actually reads as one.
+double _dayGapFor(bool mobile) => mobile ? 5.0 : 9.0;
 
 class WeeklyGrid extends ConsumerStatefulWidget {
   const WeeklyGrid({super.key});
@@ -312,10 +304,12 @@ class _WeeklyGridState extends ConsumerState<WeeklyGrid> {
     double widthFor(ColumnDefinition col) => mobile
         ? dayColWidth
         : (basic && (col.type == ColumnType.timer || col.type == ColumnType.status)) ? basicColWidth : fullColWidth;
-    final dayWidth = toggleW + visibleCols.fold(0.0, (s, c) => s + widthFor(c));
+    // The gap belongs to the day block, so it is inside [dayWidth] and cannot
+    // push the last day out of the scrollable area.
+    final dayGap = _dayGapFor(mobile);
+    final dayWidth = toggleW + visibleCols.fold(0.0, (s, c) => s + widthFor(c)) + dayGap;
     // +2px slack so sub-pixel/border accumulation can never trip an overflow.
     final rightWidth = days.length * dayWidth + 2;
-    // Contrasted divider between day blocks (header mirrors the body rows).
     final totalTableWidth = taskColWidth + rightWidth;
     final headerH = mobile ? 44.0 : 64.0;
     final rowH = mobile ? 44.0 : 48.0;
@@ -340,6 +334,9 @@ class _WeeklyGridState extends ConsumerState<WeeklyGrid> {
                 },
                 child: Container(
               width: dayWidth,
+              // Leading gap: the page colour shows through here, which is what
+              // separates one date from the next in both header and body.
+              padding: EdgeInsets.only(left: dayGap),
               decoration: flash
                   ? BoxDecoration(color: AppColors.accent.withValues(alpha: 0.14), borderRadius: BorderRadius.circular(8))
                   : null,
@@ -351,7 +348,7 @@ class _WeeklyGridState extends ConsumerState<WeeklyGrid> {
               // used with a uniform border.
               foregroundDecoration: flash
                   ? BoxDecoration(borderRadius: BorderRadius.circular(8), border: Border.all(color: AppColors.accent.withValues(alpha: 0.55)))
-                  : (di == 0 ? null : _dayDivider(di)),
+                  : null,
               // Phones get one compact line ("21 Mon"); the full date + the
               // column-label row is what forced 132px columns.
               child: mobile
@@ -1052,10 +1049,10 @@ class _RightTaskRowState extends ConsumerState<_RightTaskRow> {
     final days = widget.days;
     final cols = widget.cols;
     final hovered = widget.hovered;
-    // Soft table: no alternating fill and no vertical rules. A customer
-    // reported the boxed, high-contrast cells as hard to read, so the only
-    // lines left are the faint row separators.
-    final rowBg = AppColors.surface;
+    // The row is the page colour and each day sits on it as its own block, so
+    // the empty space between days reads as a gap. Painting the row flat is
+    // what made a vertical rule necessary in the first place.
+    final rowBg = AppColors.bg;
     final bg = hovered ? Color.alphaBlend(AppColors.accent.withValues(alpha: 0.07), rowBg) : rowBg;
     final hoverSide = BorderSide(color: AppColors.accent, width: 1.5);
     return MouseRegion(
@@ -1078,12 +1075,12 @@ class _RightTaskRowState extends ConsumerState<_RightTaskRow> {
             Builder(builder: (_) {
               final d = days[di];
               final flash = widget.flashDayKey != null && _dateKey(d) == widget.flashDayKey;
-              final flashBg = flash ? AppColors.accent.withValues(alpha: 0.07) : null;
+              final flashBg = flash ? AppColors.accent.withValues(alpha: 0.07) : AppColors.surface;
               final sc = _statusCol;
-              // Same hairline as the header, on the left of every day but the
-              // first, so both sections read as one table.
               return Container(
-                foregroundDecoration: _dayDivider(di),
+                // Same leading gap as the header, so the two sections line up
+                // and the space between dates is what separates them.
+                padding: EdgeInsets.only(left: _dayGapFor(widget.mobile)),
                 child: Row(mainAxisSize: MainAxisSize.min, children: [
                 if (widget.showToggle)
                   Container(
@@ -1165,7 +1162,7 @@ class _Cell extends ConsumerWidget {
         return InkWell(borderRadius: BorderRadius.circular(8), onTap: () async { final d = await showDatePicker(context: context, initialDate: DateTime.now(), firstDate: DateTime(2020), lastDate: DateTime(2035)); if (d != null && context.mounted) { final t = await showTimePicker(context: context, initialTime: TimeOfDay.now()); if (t != null) { final dt = DateTime(d.year, d.month, d.day, t.hour, t.minute); svc.setCellValue(taskId, date, col.id, dt.toIso8601String()); } } }, child: Container(height: 32, padding: EdgeInsets.all(6), decoration: BoxDecoration(color: AppColors.inputFill, borderRadius: BorderRadius.circular(8), border: Border.all(color: AppColors.inputBorder)), child: Text(raw != null ? raw.toString().substring(0, 16) : '—', style: TextStyle(fontSize: 10, color: AppColors.textSecondary))));
       case ColumnType.tags:
         final ids = raw is List ? List<String>.from(raw) : <String>[];
-        return TagCell(selectedIds: ids, options: col.tagOptions, onChanged: (v) => svc.setCellValue(taskId, date, col.id, v));
+        return TagCell(selectedIds: ids, col: col, onChanged: (v) => svc.setCellValue(taskId, date, col.id, v));
     }
   }
 }

@@ -130,6 +130,21 @@ class AppLocalizationsFr extends AppLocalizations {
   String get editTaskDay => 'Modifier cette journee';
 
   @override
+  String get noTagsYet => 'Aucune etiquette. Creez la premiere ci-dessous.';
+
+  @override
+  String get newTagLbl => 'Nouvelle etiquette';
+
+  @override
+  String get newTagHint => 'ex. travail concentre';
+
+  @override
+  String get addBtn => 'Ajouter';
+
+  @override
+  String get tagsHelp => 'Une etiquette peut avoir une couleur, ou rester du texte simple. Laissez le carré vide pour une etiquette texte.';
+
+  @override
   String get typeLbl => 'Type';
 
   @override

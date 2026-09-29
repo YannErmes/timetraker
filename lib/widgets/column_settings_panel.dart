@@ -129,6 +129,7 @@ class _ColumnEditDialogState extends ConsumerState<_ColumnEditDialog> {
   late TextEditingController _label;
   late ColumnType _type;
   late List<StatusOption> _statusOpts;
+  late List<TagOption> _tagOpts;
   late String _unit;
   String? _anchorId; // null = end, '__begin' = beginning, else column id
   bool _before = true;
@@ -148,6 +149,9 @@ class _ColumnEditDialogState extends ConsumerState<_ColumnEditDialog> {
           const StatusOption(id: 'in_progress', label: 'in progress'),
         ];
     _unit = widget.existing?.unit ?? 'h';
+    // A new tags column starts empty: tags are typed by the customer, either
+    // here or straight from a cell.
+    _tagOpts = widget.existing?.tagOptions ?? <TagOption>[];
     _anchorId = null; // default append at end
   }
 
@@ -282,7 +286,7 @@ class _ColumnEditDialogState extends ConsumerState<_ColumnEditDialog> {
                     Column(mainAxisSize: MainAxisSize.min, children: [
                       GestureDetector(
                         onTap: () async {
-                          final c = await showDialog<Color>(context: context, builder: (_) => _ColorPicker(initial: _hex(_statusOpts[i].effectiveColorHex)));
+                          final c = await showDialog<Color>(context: context, builder: (_) => ColorPickerDialog(initial: _hex(_statusOpts[i].effectiveColorHex)));
                           if (c != null) {
                             final l = List<StatusOption>.from(_statusOpts);
                             l[i] = StatusOption(id: l[i].id, label: l[i].label, colorHex: _toHex(c));
@@ -323,6 +327,79 @@ class _ColumnEditDialogState extends ConsumerState<_ColumnEditDialog> {
                 ),
               ),
                     TextButton.icon(onPressed: () => setState(() => _statusOpts.add(StatusOption(id: _uuid.v4(), label: 'new'))), icon: const Icon(Icons.add, size: 16), label: Text(t.addOptionLbl))
+          ],
+          if (_type == ColumnType.tags) ...[
+            Align(alignment: Alignment.centerLeft, child: Text(t.tagsTitle, style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.textSecondary))),
+            const SizedBox(height: 4),
+            Text(t.tagsHelp, style: TextStyle(fontSize: 10, color: AppColors.textSecondary)),
+            const SizedBox(height: 6),
+            for (int i = 0; i < _tagOpts.length; i++)
+              Card(
+                color: AppColors.inputFill,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8), side: BorderSide(color: AppColors.border)),
+                child: Padding(
+                  padding: const EdgeInsets.all(6),
+                  child: Row(children: [
+                    Expanded(
+                      child: TextFormField(
+                        initialValue: _tagOpts[i].label,
+                        style: TextStyle(color: AppColors.textPrimary, fontSize: 13),
+                        decoration: InputDecoration(labelText: t.labelFieldLbl, isDense: true),
+                        onChanged: (v) {
+                          final l = List<TagOption>.from(_tagOpts);
+                          l[i] = TagOption(id: l[i].id, label: v, colorHex: l[i].colorHex);
+                          setState(() => _tagOpts = l);
+                        },
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    // Colour is optional for a tag: a tag with no colour is a
+                    // plain text tag, which is a perfectly good tag.
+                    Column(mainAxisSize: MainAxisSize.min, children: [
+                      GestureDetector(
+                        onTap: () async {
+                          final c = await showDialog<Color>(context: context, builder: (_) => ColorPickerDialog(initial: _tagOpts[i].hasColor ? _hex(_tagOpts[i].colorHex) : null));
+                          if (c != null) {
+                            final l = List<TagOption>.from(_tagOpts);
+                            l[i] = TagOption(id: l[i].id, label: l[i].label, colorHex: _toHex(c));
+                            setState(() => _tagOpts = l);
+                          }
+                        },
+                        child: Container(
+                          width: 32,
+                          height: 32,
+                          decoration: BoxDecoration(
+                            color: _tagOpts[i].hasColor ? _hex(_tagOpts[i].colorHex) : Colors.transparent,
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(
+                              color: _tagOpts[i].hasColor ? AppColors.border : AppColors.textSecondary,
+                              width: _tagOpts[i].hasColor ? 1 : 1.5,
+                            ),
+                          ),
+                        ),
+                      ),
+                      if (_tagOpts[i].hasColor)
+                        GestureDetector(
+                          onTap: () {
+                            final l = List<TagOption>.from(_tagOpts);
+                            l[i] = TagOption(id: l[i].id, label: l[i].label);
+                            setState(() => _tagOpts = l);
+                          },
+                          child: Padding(
+                            padding: const EdgeInsets.only(top: 1),
+                            child: Icon(Icons.close_rounded, size: 12, color: AppColors.textSecondary),
+                          ),
+                        ),
+                    ]),
+                    IconButton(icon: Icon(Icons.delete, size: 18, color: AppColors.textSecondary), onPressed: () => setState(() => _tagOpts.removeAt(i))),
+                  ]),
+                ),
+              ),
+            TextButton.icon(
+              onPressed: () => setState(() => _tagOpts.add(TagOption(id: 'tag_${_uuid.v4()}', label: 'new'))),
+              icon: const Icon(Icons.add, size: 16),
+              label: Text(t.addOptionLbl),
+            ),
           ]
         ]),
       ),
@@ -346,6 +423,7 @@ class _ColumnEditDialogState extends ConsumerState<_ColumnEditDialog> {
     }
     Map<String, dynamic> cfg = {};
     if (_type == ColumnType.status) cfg = {'options': _statusOpts.map((e) => e.toJson()).toList()};
+    if (_type == ColumnType.tags) cfg = {'options': _tagOpts.map((e) => e.toJson()).toList()};
     if (_type == ColumnType.number) cfg = {'unit': _unit};
     final col = ColumnDefinition(id: id, label: _label.text.trim().isEmpty ? loc.untitledLower : _label.text.trim(), type: _type, position: pos, config: cfg);
     if (widget.existing != null && widget.existing!.type != _type) {
@@ -367,9 +445,11 @@ class _ColumnEditDialogState extends ConsumerState<_ColumnEditDialog> {
   }
 }
 
-class _ColorPicker extends StatelessWidget {
-  final Color initial;
-  const _ColorPicker({required this.initial});
+/// Small swatch grid for picking a colour, shared by the status options and
+/// the tag editor. Returns null if dismissed, so a colour can be left unset.
+class ColorPickerDialog extends StatelessWidget {
+  final Color? initial;
+  const ColorPickerDialog({super.key, this.initial});
   @override
   Widget build(BuildContext context) {
     final loc = AppLocalizations.of(context)!;
@@ -378,7 +458,7 @@ class _ColorPicker extends StatelessWidget {
       backgroundColor: AppColors.surface,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8), side: BorderSide(color: AppColors.border)),
       title: Text(loc.pickColorTitle, style: TextStyle(color: AppColors.textPrimary)),
-      content: Wrap(spacing: 8, runSpacing: 8, children: colors.map((c) => GestureDetector(onTap: () => Navigator.pop(context, c), child: Container(width: 36, height: 36, decoration: BoxDecoration(color: c, shape: BoxShape.circle, border: Border.all(color: AppColors.border))))).toList()),
+      content: Wrap(spacing: 8, runSpacing: 8, children: colors.map((c) => GestureDetector(onTap: () => Navigator.pop(context, c), child: Container(width: 36, height: 36, decoration: BoxDecoration(color: c, shape: BoxShape.circle, border: Border.all(color: initial != null && c.toARGB32() == initial!.toARGB32() ? AppColors.textPrimary : AppColors.border, width: 2))))).toList()),
       actions: [TextButton(onPressed: () => Navigator.pop(context), child: Text(loc.close))],
     );
   }

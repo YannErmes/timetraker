@@ -409,7 +409,7 @@ class _SquareTaskCard extends ConsumerWidget {
                         break;
                       case ColumnType.tags:
                         final ids = raw is List ? List<String>.from(raw) : <String>[];
-                        child = TagCell(selectedIds: ids, options: col.tagOptions, onChanged: (v) => svc.setCellValue(task.id, date, col.id, v));
+                        child = TagCell(selectedIds: ids, col: col, onChanged: (v) => svc.setCellValue(task.id, date, col.id, v));
                         break;
                       case ColumnType.date:
                         child = InkWell(borderRadius: BorderRadius.circular(8), onTap: () async { final d = await showDatePicker(context: context, initialDate: DateTime.now(), firstDate: DateTime(2020), lastDate: DateTime(2035)); if (d != null) svc.setCellValue(task.id, date, col.id, d.toIso8601String().split('T').first); }, child: Container(padding: EdgeInsets.all(6), decoration: BoxDecoration(color: AppColors.inputFill, borderRadius: BorderRadius.circular(8), border: Border.all(color: AppColors.inputBorder)), child: Text(raw ?? '—', style: TextStyle(fontSize: 11, color: AppColors.textSecondary))));
