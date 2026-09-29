@@ -47,6 +47,9 @@ class TagOption {
 
   bool get hasColor => colorHex.isNotEmpty;
 
+  /// The grey an uncoloured tag falls back to for a swatch.
+  static const neutralColorHex = '#64748B';
+
   Map<String, dynamic> toJson() => {'id': id, 'label': label, 'colorHex': colorHex};
   factory TagOption.fromJson(Map<String, dynamic> j) => TagOption(
         id: j['id'] as String,

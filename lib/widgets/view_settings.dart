@@ -135,6 +135,12 @@ class _DensityDialog extends ConsumerWidget {
   }
 }
 
+/// Sync indicator.
+///
+/// Deliberately just a tick. The project host and the key prefix used to be
+/// spelled out here, which told the customer nothing they can act on and made
+/// the settings panel look like a debug screen. A green tick means the same
+/// thing - their data is syncing - without the internals.
 class _CloudStatusRow extends StatelessWidget {
   final AppLocalizations t;
   const _CloudStatusRow(this.t);
@@ -143,26 +149,12 @@ class _CloudStatusRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final ok = isSupabaseConfigured;
     final color = ok ? const Color(0xFF22C55E) : const Color(0xFFF59E0B);
-    // Showing the host proves at a glance which build is running and which
-    // project it talks to, instead of guessing from a banner.
-    final host = Uri.tryParse(supabaseUrl)?.host ?? supabaseUrl;
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.1),
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: color.withValues(alpha: 0.45)),
-      ),
-      child: Row(children: [
-        Icon(ok ? Icons.cloud_done_rounded : Icons.cloud_off_rounded, size: 15, color: color),
-        const SizedBox(width: 8),
-        Expanded(
-          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text(ok ? t.cloudOkTip : t.cloudNotConfigured, style: TextStyle(fontSize: 10.5, color: color, fontWeight: FontWeight.w600)),
-            Text(host, style: TextStyle(fontSize: 9.5, color: AppColors.textSecondary), maxLines: 1, overflow: TextOverflow.ellipsis),
-            Text(supabaseKeyLabel, style: TextStyle(fontSize: 9.5, color: AppColors.textSecondary), maxLines: 1, overflow: TextOverflow.ellipsis),
-          ]),
-        ),
+    return Tooltip(
+      message: ok ? t.cloudOkTip : t.cloudNotConfigured,
+      child: Row(mainAxisAlignment: MainAxisAlignment.end, children: [
+        Text(ok ? t.cloudOkShort : t.cloudNotConfigured, style: TextStyle(fontSize: 10, color: AppColors.textSecondary)),
+        const SizedBox(width: 4),
+        Icon(ok ? Icons.check_circle_rounded : Icons.error_outline_rounded, size: 13, color: color),
       ]),
     );
   }

@@ -4,8 +4,11 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:tracker_sheet/app.dart';
+import 'package:tracker_sheet/models/column_definition.dart';
 import 'package:tracker_sheet/models/enums.dart';
+import 'package:tracker_sheet/models/task.dart';
 import 'package:tracker_sheet/providers/app_providers.dart';
+import 'package:tracker_sheet/services/supabase_service.dart';
 import 'package:tracker_sheet/services/notification_service.dart';
 
 /// Grabs a [WidgetRef] from inside the app subtree so a test can drive providers.
@@ -106,6 +109,74 @@ void main() {
       print('LAYOUT ERROR (mobile weekly list) >>> $err');
     }
     expect(err, isNull);
+  });
+
+  // A task's own tags are read through `widget.task`, which is dynamic, so the
+  // list used to come back as an untyped JSArray and blew up the moment it was
+  // passed to a List<TagOption> parameter - only on web. This drives the real
+  // code path with a tagged task and checks the desktop weekly row survives it.
+  testWidgets('a tagged task renders in the desktop weekly row', (tester) async {
+    tester.view.physicalSize = const Size(1800, 1000);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(() {
+      tester.view.resetPhysicalSize();
+      tester.view.resetDevicePixelRatio();
+    });
+    SharedPreferences.setMockInitialValues({'tracker_email': 'tags@test.dev', 'tracker_user_id': 'tags-user'});
+    WidgetRef? captured;
+    await tester.pumpWidget(ProviderScope(child: _CaptureRef(onRef: (r) => captured = r, child: const TrackerApp())));
+    for (var i = 0; i < 6; i++) {
+      await tester.pump(const Duration(milliseconds: 400));
+    }
+    final svc = captured!.read(supabaseServiceProvider);
+    // A tags column, so the task's tag ids can be resolved to real options.
+    await svc.addColumn(ColumnDefinition(
+      id: 'col_tags',
+      label: 'tags',
+      type: ColumnType.tags,
+      position: 9,
+      config: {
+        'options': [
+          TagOption(id: 'tag_deep', label: 'deep work', colorHex: '#F43F5E').toJson(),
+          TagOption(id: 'tag_plain', label: 'admin').toJson(),
+        ]
+      },
+    ));
+    // A failed cloud fetch replaces the in-memory list with the (empty) local
+    // cache, so seed after it has settled and re-seed if it lands late.
+    Task? tagged;
+    for (var attempt = 0; attempt < 4 && tagged == null; attempt++) {
+      await tester.pump(const Duration(milliseconds: 600));
+      if (!svc.tasks.any((t) => t.name == 'tagged task')) {
+        await svc.addTask('tagged task');
+      }
+      final hit = svc.tasks.where((t) => t.name == 'tagged task').toList();
+      if (hit.isNotEmpty) {
+        // The list that used to arrive as a JSArray<dynamic>.
+        await svc.setTaskTags(hit.first.id, ['tag_deep', 'tag_plain']);
+        tagged = hit.first;
+      }
+    }
+    // ignore: avoid_print
+    print('TAG TEST >>> tasks=${svc.tasks.length} userId=${svc.userId} seeded=${tagged != null}');
+    expect(tagged, isNotNull, reason: 'the seeded task should exist so its tag path is exercised');
+
+    captured!.read(viewModeProvider.notifier).state = ViewMode.weekly;
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 600));
+
+    // The point of the test: rendering the tagged row must not throw. The tag
+    // ids went in as a plain List, the way the cloud hands them back.
+    final err = tester.takeException();
+    if (err != null) {
+      // ignore: avoid_print
+      print('TAG ROW ERROR >>> $err');
+    }
+    expect(err, isNull);
+
+    NotificationService.instance.dispose();
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pump(const Duration(seconds: 60));
   });
 
   testWidgets('App loads', (tester) async {

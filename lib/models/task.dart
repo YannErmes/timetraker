@@ -7,6 +7,11 @@ class Task {
   /// Reminder shorthand (e.g. 10MI, 2H, 1D, 1W, 1M) — null/empty = none.
   final String? reminder;
 
+  /// Tag ids attached to the task itself, as opposed to the tags column that
+  /// tags a task on one particular day. A task tagged "project" stays tagged
+  /// "project" on every day, including days it was never scheduled on.
+  final List<String> tags;
+
   const Task({
     required this.id,
     required this.name,
@@ -14,15 +19,17 @@ class Task {
     required this.createdAt,
     required this.userId,
     this.reminder,
+    this.tags = const [],
   });
 
-  Task copyWith({String? name, int? position, String? Function()? reminder}) => Task(
+  Task copyWith({String? name, int? position, String? Function()? reminder, List<String>? tags}) => Task(
         id: id,
         name: name ?? this.name,
         position: position ?? this.position,
         createdAt: createdAt,
         userId: userId,
         reminder: reminder != null ? reminder() : this.reminder,
+        tags: tags ?? this.tags,
       );
 
   factory Task.fromSupabase(Map<String, dynamic> j) => Task(
@@ -32,6 +39,9 @@ class Task {
         createdAt: DateTime.parse(j['created_at'] as String),
         userId: j['user_id'] as String,
         reminder: (j['reminder'] as String?)?.trim().isEmpty == true ? null : j['reminder'] as String?,
+        // Written as jsonb, but a missing column (older schema) or a text value
+        // must not break the whole task list.
+        tags: _tagIds(j['tags']),
       );
 
   Map<String, dynamic> toSupabase() => {
@@ -40,7 +50,27 @@ class Task {
         'position': position,
         'user_id': userId,
         'reminder': reminder,
+        'tags': tags,
       };
+
+  /// Reads the tag id list from whatever the database handed back: a jsonb
+  /// array, a Postgres text array, or nothing at all.
+  static List<String> _tagIds(dynamic raw) {
+    if (raw is List) return raw.map((e) => '$e').where((e) => e.isNotEmpty).toList();
+    if (raw is String && raw.trim().isNotEmpty) {
+      // A string that is really a json array, e.g. ["a","b"].
+      final s = raw.trim();
+      if (s.startsWith('[') && s.endsWith(']')) {
+        return s
+            .substring(1, s.length - 1)
+            .split(',')
+            .map((e) => e.trim().replaceAll('"', '').replaceAll("'", '').trim())
+            .where((e) => e.isNotEmpty)
+            .toList();
+      }
+    }
+    return const [];
+  }
 
   /// Parse a reminder shorthand into a Duration.
   /// Units (case-insensitive): MI = minutes, H = hours, D = days,

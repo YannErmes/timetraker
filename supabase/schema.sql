@@ -44,6 +44,14 @@ do $$ begin
   alter table public.tasks add column reminder text;
 exception when others then null; end $$;
 
+-- Task-level tags: a tag on the task itself, as opposed to the tags column
+-- which tags a task on one particular day. Array of tag ids; the labels and
+-- colours live in the tags column's config.
+do $$ begin
+  alter table public.tasks add column if not exists tags jsonb not null default '[]'::jsonb;
+exception when others then null; end $$;
+create index if not exists idx_tasks_tags on public.tasks using gin (tags);
+
 -- 2. Column definitions (user-managed columns) — per-user, so id can repeat across users
 create table if not exists public.column_definitions (
   id text not null, -- e.g. col_xxx, scoped per user

@@ -239,7 +239,7 @@ class TagCell extends ConsumerWidget {
   Future<void> _pick(BuildContext context, WidgetRef ref) async {
     final res = await showDialog<({List<String> selected, List<TagOption> options})>(
       context: context,
-      builder: (_) => _TagPicker(options: col.tagOptions, selected: selectedIds),
+      builder: (_) => TagPickerDialog(options: col.tagOptions, selected: selectedIds),
     );
     if (res == null) return;
     if (!listEquals(res.options, col.tagOptions)) {
@@ -259,15 +259,15 @@ class TagCell extends ConsumerWidget {
   }
 }
 
-class _TagPicker extends StatefulWidget {
+class TagPickerDialog extends StatefulWidget {
   final List<TagOption> options;
   final List<String> selected;
-  const _TagPicker({required this.options, required this.selected});
+  const TagPickerDialog({super.key, required this.options, required this.selected});
   @override
-  State<_TagPicker> createState() => _TagPickerState();
+  State<TagPickerDialog> createState() => _TagPickerState();
 }
 
-class _TagPickerState extends State<_TagPicker> {
+class _TagPickerState extends State<TagPickerDialog> {
   late Set<String> sel;
   late List<TagOption> options;
   final _newLabel = TextEditingController();

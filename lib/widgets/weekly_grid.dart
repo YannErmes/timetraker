@@ -23,6 +23,7 @@ import 'task_pool.dart';
 import 'monthly_view.dart';
 import 'note_editor_panel.dart';
 import 'reminder_dialog.dart';
+import 'task_details_dialog.dart';
 
 /// Space between one date's block of cells and the next, in the same spirit as
 /// the gap between the cards in Daily view. A gap replaced the vertical rule:
@@ -146,6 +147,24 @@ class _WeeklyGridState extends ConsumerState<WeeklyGrid> {
     if (scrolled != _hScrolled) setState(() => _hScrolled = scrolled);
   }
 
+  /// Jump to any week: pick a date, land on the week that contains it. The
+  /// arrows only ever move one week at a time, which is fine for "yesterday"
+  /// and hopeless for "November".
+  Future<void> _pickWeek(BuildContext context, DateTime currentWeekStart) async {
+    final loc = AppLocalizations.of(context)!;
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: currentWeekStart,
+      firstDate: DateTime(currentWeekStart.year - 10),
+      lastDate: DateTime(currentWeekStart.year + 10, 12, 31),
+      helpText: loc.jumpToWeekTitle,
+    );
+    if (picked == null) return;
+    // Snap to the Monday of the picked week, so landing mid-week does not show
+    // a partial row.
+    ref.read(selectedDateProvider.notifier).state = picked.subtract(Duration(days: picked.weekday - 1));
+  }
+
   @override
   void dispose() {
     _flashTimer?.cancel();
@@ -218,9 +237,19 @@ class _WeeklyGridState extends ConsumerState<WeeklyGrid> {
               style: _iconBtnStyle(narrow),
               onPressed: () => ref.read(selectedDateProvider.notifier).state = anchor.subtract(Duration(days: 7)),
             ),
+            // The week range is a button, not a label: reaching December from
+            // September by tapping the arrows is 13 clicks. Clicking it picks
+            // any date and jumps to the week that contains it.
             Flexible(
-              child: Text('${formatShort(allDays.first)} – ${formatShort(allDays.last)} ${allDays.first.year}',
-                  style: TextStyle(fontWeight: FontWeight.w700, color: AppColors.textPrimary, fontSize: narrow ? 11 : 13), overflow: TextOverflow.ellipsis),
+              child: InkWell(
+                onTap: () => _pickWeek(context, allDays.first),
+                borderRadius: BorderRadius.circular(8),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                  child: Text('${formatShort(allDays.first)} – ${formatShort(allDays.last)} ${allDays.first.year}',
+                      style: TextStyle(fontWeight: FontWeight.w700, color: AppColors.textPrimary, fontSize: narrow ? 11 : 13), overflow: TextOverflow.ellipsis, textAlign: TextAlign.center),
+                ),
+              ),
             ),
             IconButton(
               icon: Icon(Icons.chevron_right, color: AppColors.textSecondary),
@@ -441,6 +470,7 @@ class _WeeklyGridState extends ConsumerState<WeeklyGrid> {
       itemBuilder: (ctx, i) => _LeftTaskCell(
           key: ValueKey(tasks[i].id),
           task: tasks[i],
+          weekDays: days,
           isAlt: i % 2 == 1,
           hScrolled: _hScrolled,
           hovered: _hoverTaskId == (tasks[i] as Task).id,
@@ -860,14 +890,18 @@ class _WeeklyGridState extends ConsumerState<WeeklyGrid> {
 }
 
 class _LeftTaskCell extends ConsumerStatefulWidget {
-  final dynamic task;
+  /// Typed, not dynamic. With a dynamic task, `task.tags.map(...).toList()`
+  /// came back as an untyped JSArray and threw when it reached a
+  /// List<TagOption> parameter - on web only, so the VM tests never saw it.
+  final Task task;
+  final List<DateTime> weekDays;
   final bool isAlt;
   final bool hScrolled;
   final bool hovered;
   final ValueChanged<bool> onHover;
   final VoidCallback onRename;
   final VoidCallback onNotesRecap;
-  const _LeftTaskCell({super.key, required this.task, required this.isAlt, required this.hScrolled, required this.hovered, required this.onHover, required this.onRename, required this.onNotesRecap});
+  const _LeftTaskCell({super.key, required this.task, required this.weekDays, required this.isAlt, required this.hScrolled, required this.hovered, required this.onHover, required this.onRename, required this.onNotesRecap});
   @override
   ConsumerState<_LeftTaskCell> createState() => _LeftTaskCellState();
 }
@@ -904,6 +938,15 @@ String _weekdayShort(DateTime d) {
 String _clockTime(BuildContext context, DateTime t) =>
     MaterialLocalizations.of(context).formatTimeOfDay(TimeOfDay.fromDateTime(t));
 
+/// #RRGGBB for a tag dot. A tag with no colour of its own is the neutral grey,
+/// never another tag's colour.
+Color _hexColor(String hex) {
+  var h = hex.replaceAll('#', '');
+  if (h.isEmpty) h = TagOption.neutralColorHex.replaceAll('#', '');
+  if (h.length == 6) h = 'FF$h';
+  return Color(int.tryParse(h, radix: 16) ?? 0xFF64748B);
+}
+
 class _LeftTaskCellState extends ConsumerState<_LeftTaskCell> {
   @override
   Widget build(BuildContext context) {
@@ -914,17 +957,22 @@ class _LeftTaskCellState extends ConsumerState<_LeftTaskCell> {
     final rowBg = AppColors.surface;
     final bg = hovered ? Color.alphaBlend(AppColors.accent.withValues(alpha: 0.07), rowBg) : rowBg;
     final hoverSide = BorderSide(color: AppColors.accent, width: 1.5);
-    // Note count for the menu label.
     final allCols = List.of(svc.columns)..sort((a, b) => a.position.compareTo(b.position));
-    final noteCol = allCols.where((c) => c.id == 'col_note').firstOrNull ??
-        allCols.where((c) => c.type == ColumnType.text && c.label.toLowerCase().contains('note')).firstOrNull;
-    int noteCount = 0;
-    if (noteCol != null) {
-      noteCount = svc.entries.where((e) => e.taskId == task.id && notePlainText(e.data[noteCol.id]).isNotEmpty).length;
-    }
-    final noUpcomingDay = (task.reminder as String?)?.isNotEmpty == true && svc.nextAssignedEntry(task.id as String) == null;
-    // On a phone-width task column the bell and the menu cannot both fit next
-    // to the name, and the menu already lists the reminder.
+    // Task-level tags come from the first tags column's option list, so the
+    // tags the customer has already defined are the ones on offer.
+    final tagCol = allCols.where((c) => c.type == ColumnType.tags).firstOrNull;
+    final tagOptions = tagCol?.tagOptions ?? const <TagOption>[];
+    // The task is typed, so task.tags is a real List<String> and this produces a
+    // properly typed List<TagOption>.
+    final List<String> tagIds = task.tags;
+    final List<TagOption> taskTags = tagIds.map((id) {
+      for (final o in tagOptions) {
+        if (o.id == id) return o;
+      }
+      // A tag whose option was deleted still shows, as plain text, rather than
+      // silently vanishing from the task.
+      return TagOption(id: id, label: id);
+    }).toList();
     final mobile = MediaQuery.of(context).size.width < 600;
     // Same source of truth as the scheduler: spell out the time the reminder
     // will actually fire, so "3MI" never looks like "in 3 minutes".
@@ -945,8 +993,7 @@ class _LeftTaskCellState extends ConsumerState<_LeftTaskCell> {
           color: bg,
           boxShadow: widget.hScrolled ? [BoxShadow(color: Colors.black.withValues(alpha: 0.28), blurRadius: 6, offset: const Offset(2, 0))] : null,
         ),
-        // Painted on top so the hover outline never steals width from the
-        // name + menu row below.
+        // Painted on top so the hover outline never steals width from the row.
         foregroundDecoration: BoxDecoration(
           border: Border(
             bottom: hovered ? hoverSide : BorderSide(color: AppColors.border, width: 1),
@@ -955,62 +1002,67 @@ class _LeftTaskCellState extends ConsumerState<_LeftTaskCell> {
             left: hovered ? hoverSide : BorderSide.none,
           ),
         ),
-        padding: EdgeInsets.symmetric(horizontal: mobile ? 6 : 8),
+        padding: EdgeInsets.only(left: mobile ? 6 : 8, right: 4),
+        // The task's own tags are a coloured dot in front of the name: a red
+        // "deep work" tag is a red dot. Clicking the name opens everything
+        // else. A sub-column and a hover slide were both tried here and each
+        // cost more room than it was worth.
         child: Row(children: [
-          Expanded(child: InkWell(onTap: widget.onRename, borderRadius: BorderRadius.circular(8), child: Padding(padding: EdgeInsets.symmetric(vertical: 4, horizontal: mobile ? 2 : 0), child: Text(task.name.isEmpty ? '—' : task.name, style: TextStyle(fontSize: mobile ? 12.5 : 12, color: task.name.isEmpty ? AppColors.textSecondary : AppColors.textPrimary, fontWeight: FontWeight.w500), overflow: TextOverflow.ellipsis)))),
-          if (!mobile && (task.reminder as String?)?.isNotEmpty == true)
-            Tooltip(
-              message: bellMsg,
-              child: Padding(
-                padding: const EdgeInsets.only(right: 2),
-                child: Icon(Icons.notifications_outlined, size: 13, color: AppColors.accent),
+          if (taskTags.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.only(right: 5),
+              child: Row(mainAxisSize: MainAxisSize.min, children: [
+                for (final t in taskTags.take(3))
+                  Tooltip(
+                    message: t.label,
+                    child: Container(
+                      width: 7,
+                      height: 7,
+                      margin: const EdgeInsets.only(right: 3),
+                      decoration: BoxDecoration(color: _hexColor(t.colorHex), shape: BoxShape.circle),
+                    ),
+                  ),
+                if (taskTags.length > 3) Text('+${taskTags.length - 3}', style: TextStyle(fontSize: 8.5, color: AppColors.textSecondary)),
+              ]),
+            ),
+          Expanded(
+            child: InkWell(
+              onTap: () => showTaskDetails(
+                context,
+                task: task,
+                weekDays: widget.weekDays,
+                onRenamed: widget.onRename,
+                onNotesRecap: widget.onNotesRecap,
+              ),
+              borderRadius: BorderRadius.circular(8),
+              child: Container(
+                padding: EdgeInsets.symmetric(vertical: 4, horizontal: mobile ? 2 : 4),
+                child: Row(children: [
+                  Flexible(
+                    child: Text(
+                      task.name.isEmpty ? '-' : task.name,
+                      style: TextStyle(fontSize: mobile ? 12.5 : 12, color: task.name.isEmpty ? AppColors.textSecondary : AppColors.textPrimary, fontWeight: FontWeight.w500),
+                      overflow: TextOverflow.ellipsis,
+                      maxLines: 1,
+                    ),
+                  ),
+                  if (!mobile && (task.reminder as String?)?.isNotEmpty == true)
+                    Tooltip(
+                      message: bellMsg,
+                      child: Padding(
+                        padding: const EdgeInsets.only(left: 4),
+                        child: Icon(Icons.notifications_outlined, size: 12, color: AppColors.accent),
+                      ),
+                    ),
+                ]),
               ),
             ),
-          PopupMenuButton(
-            color: AppColors.surface,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8), side: BorderSide(color: AppColors.border)),
-            // IconButton defaults to a 40-48px tap target, which ate half of a
-            // 148px task column and left ~4 characters for the name.
-            style: mobile
-                ? IconButton.styleFrom(minimumSize: const Size(30, 30), padding: EdgeInsets.zero, tapTargetSize: MaterialTapTargetSize.shrinkWrap)
-                : null,
-            itemBuilder: (_) => [
-              // A per-task reminder counts back from the next scheduled
-              // occurrence, so an unscheduled task would never fire: say so
-              // instead of failing silently.
-              if (noUpcomingDay)
-                PopupMenuItem(
-                  enabled: false,
-                  child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                    const Padding(
-                      padding: EdgeInsets.only(top: 1),
-                      child: Icon(Icons.warning_amber_rounded, size: 14, color: Color(0xFFF59E0B)),
-                    ),
-                    const SizedBox(width: 6),
-                    Expanded(child: Text(loc.reminderNoUpcomingDay, style: const TextStyle(fontSize: 10, color: Color(0xFFB45309)))),
-                  ]),
-                ),
-              PopupMenuItem(value: 'notes', child: Text(noteCol == null ? loc.notesRecap : loc.notesRecapCount('$noteCount'))),
-              PopupMenuItem(
-                  value: 'reminder',
-                  child: Text((task.reminder as String?)?.isNotEmpty == true ? loc.reminderSet((task.reminder as String).toUpperCase()) : loc.setReminderItem)),
-              PopupMenuItem(value: 'rename', child: Text(loc.rename)),
-              PopupMenuItem(value: 'delete', child: Text(loc.delete)),
-            ],
-            onSelected: (v) {
-              if (v == 'notes') widget.onNotesRecap();
-              if (v == 'reminder') showReminderDialog(context, task as Task);
-              if (v == 'rename') widget.onRename();
-              if (v == 'delete') svc.deleteTask(task.id);
-            },
-            icon: Icon(Icons.more_horiz, size: 16, color: AppColors.textSecondary),
           ),
         ]),
       ),
     );
   }
 }
-
 class _RightTaskRow extends ConsumerStatefulWidget {
   final dynamic task;
   final List<DateTime> days;

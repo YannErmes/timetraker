@@ -261,7 +261,7 @@ class SupabaseService {
     try {
       final existingTasks = await _cache.loadTasks();
       final otherTasks = existingTasks.where((j) => j['user_id'] != uid).toList();
-      final currentTasks = _tasks.map((t) => {'id': t.id, 'name': t.name, 'position': t.position, 'created_at': t.createdAt.toIso8601String(), 'user_id': t.userId, 'reminder': t.reminder}).toList();
+      final currentTasks = _tasks.map((t) => {'id': t.id, 'name': t.name, 'position': t.position, 'created_at': t.createdAt.toIso8601String(), 'user_id': t.userId, 'reminder': t.reminder, 'tags': t.tags}).toList();
       await _cache.saveTasks([...otherTasks, ...currentTasks]);
 
       final existingCols = await _cache.loadColumns();
@@ -485,6 +485,16 @@ class SupabaseService {
   }
 
   // Tasks CRUD — instant write + queue on failure
+  /// The task with this id, or null once it has been deleted. The task
+  /// details dialog holds the id rather than the object so it reflects a
+  /// delete or a rename that happened while it was open.
+  Task? taskById(String id) {
+    for (final t in _tasks) {
+      if (t.id == id) return t;
+    }
+    return null;
+  }
+
   Future<void> addTask(String name) async {
     if (userId == null) return;
     final t = Task(id: _uuid.v4(), name: name, position: _tasks.length, createdAt: DateTime.now(), userId: userId!);
@@ -497,10 +507,19 @@ class SupabaseService {
       _demoTasksByUser[uid]!.add(t);
       return;
     }
+    // A workspace that has not run supabase/002_task_tags.sql yet has no tags
+    // column, and inserting it would make creating a task fail outright. Try
+    // with the column, then without it, so the migration can be applied later.
+    final row = {'id': t.id, 'name': t.name, 'position': t.position, 'user_id': t.userId, 'reminder': t.reminder, 'tags': t.tags};
     try {
-      await _client!.from('tasks').insert({'id': t.id, 'name': t.name, 'position': t.position, 'user_id': t.userId, 'reminder': t.reminder});
+      await _client!.from('tasks').insert(row);
     } catch (e) {
-      await _cache.enqueue(PendingMutation(id: _uuid.v4(), table: 'tasks', op: 'insert', payload: {'id': t.id, 'name': t.name, 'position': t.position, 'user_id': t.userId, 'reminder': t.reminder}, createdAt: DateTime.now()));
+      try {
+        final noTags = Map<String, dynamic>.from(row)..remove('tags');
+        await _client!.from('tasks').insert(noTags);
+      } catch (e2) {
+        await _cache.enqueue(PendingMutation(id: _uuid.v4(), table: 'tasks', op: 'insert', payload: row, createdAt: DateTime.now()));
+      }
     }
     refreshTaskReminders();
   }
@@ -510,12 +529,42 @@ class SupabaseService {
     _tasksCtrl.add(_tasks);
     await _persistCache();
     if (!isConfigured) return;
+    final row = {'name': t.name, 'position': t.position, 'reminder': t.reminder, 'tags': t.tags};
     try {
-      await _client!.from('tasks').update({'name': t.name, 'position': t.position, 'reminder': t.reminder}).eq('id', t.id).eq('user_id', t.userId);
+      await _client!.from('tasks').update(row).eq('id', t.id).eq('user_id', t.userId);
     } catch (e) {
-      await _cache.enqueue(PendingMutation(id: _uuid.v4(), table: 'tasks', op: 'update', payload: {'id': t.id, 'name': t.name, 'position': t.position, 'user_id': t.userId, 'reminder': t.reminder}, createdAt: DateTime.now()));
+      try {
+        final noTags = Map<String, dynamic>.from(row)..remove('tags');
+        await _client!.from('tasks').update(noTags).eq('id', t.id).eq('user_id', t.userId);
+      } catch (e2) {
+        await _cache.enqueue(PendingMutation(id: _uuid.v4(), table: 'tasks', op: 'update', payload: {'id': t.id, 'user_id': t.userId, ...row}, createdAt: DateTime.now()));
+      }
     }
     refreshTaskReminders();
+  }
+
+  /// Tags on the task itself rather than on one day. Kept separate from the
+  /// tags column: a task tagged "project" carries it everywhere, including the
+  /// days it was never scheduled on.
+  Future<void> setTaskTags(String taskId, List<String> tagIds) async {
+    final i = _tasks.indexWhere((t) => t.id == taskId);
+    if (i == -1) return;
+    final updated = _tasks[i].copyWith(tags: tagIds);
+    _tasks = [..._tasks]..[i] = updated;
+    _tasksCtrl.add(_tasks);
+    await _persistCache();
+    if (isConfigured) {
+      try {
+        await _client!.from('tasks').update({'tags': tagIds}).eq('id', taskId).eq('user_id', userId!);
+      } catch (e) {
+        await _cache.enqueue(PendingMutation(id: _uuid.v4(), table: 'tasks', op: 'update', payload: {'id': taskId, 'user_id': userId, 'tags': tagIds}, createdAt: DateTime.now()));
+      }
+    }
+    final demo = _demoTasksByUser[userId!];
+    if (demo != null) {
+      final j = demo.indexWhere((t) => t.id == taskId);
+      if (j != -1) demo[j] = updated;
+    }
   }
 
   Future<void> deleteTask(String id) async {

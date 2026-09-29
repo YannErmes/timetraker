@@ -145,6 +145,24 @@ class AppLocalizationsEn extends AppLocalizations {
   String get tagsHelp => 'A tag can have a colour, or be plain text. Leave the swatch empty for a text tag.';
 
   @override
+  String get cloudOkShort => 'Synced';
+
+  @override
+  String get taskTagsTitle => 'Tags on this task';
+
+  @override
+  String get weekDaysTitle => 'Scheduled days';
+
+  @override
+  String get jumpToWeekTitle => 'Jump to a week';
+
+  @override
+  String get addTaskTags => 'Add tags to this task';
+
+  @override
+  String get editTaskTags => 'Edit task tags';
+
+  @override
   String get typeLbl => 'Type';
 
   @override

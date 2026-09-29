@@ -145,6 +145,24 @@ class AppLocalizationsFr extends AppLocalizations {
   String get tagsHelp => 'Une etiquette peut avoir une couleur, ou rester du texte simple. Laissez le carré vide pour une etiquette texte.';
 
   @override
+  String get cloudOkShort => 'Synchronise';
+
+  @override
+  String get taskTagsTitle => 'Etiquettes de cette tache';
+
+  @override
+  String get weekDaysTitle => 'Jours planifies';
+
+  @override
+  String get jumpToWeekTitle => 'Aller a une semaine';
+
+  @override
+  String get addTaskTags => 'Ajouter des etiquettes a cette tache';
+
+  @override
+  String get editTaskTags => 'Modifier les etiquettes';
+
+  @override
   String get typeLbl => 'Type';
 
   @override

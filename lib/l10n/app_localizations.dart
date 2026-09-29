@@ -359,6 +359,42 @@ abstract class AppLocalizations {
   /// **'A tag can have a colour, or be plain text. Leave the swatch empty for a text tag.'**
   String get tagsHelp;
 
+  /// No description provided for @cloudOkShort.
+  ///
+  /// In en, this message translates to:
+  /// **'Synced'**
+  String get cloudOkShort;
+
+  /// No description provided for @taskTagsTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Tags on this task'**
+  String get taskTagsTitle;
+
+  /// No description provided for @weekDaysTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Scheduled days'**
+  String get weekDaysTitle;
+
+  /// No description provided for @jumpToWeekTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Jump to a week'**
+  String get jumpToWeekTitle;
+
+  /// No description provided for @addTaskTags.
+  ///
+  /// In en, this message translates to:
+  /// **'Add tags to this task'**
+  String get addTaskTags;
+
+  /// No description provided for @editTaskTags.
+  ///
+  /// In en, this message translates to:
+  /// **'Edit task tags'**
+  String get editTaskTags;
+
   /// No description provided for @typeLbl.
   ///
   /// In en, this message translates to:
