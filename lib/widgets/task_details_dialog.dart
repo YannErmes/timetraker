@@ -37,6 +37,10 @@ Future<void> showTaskDetails(
         child: _TaskDetailsBody(
           taskId: task.id,
           weekDays: weekDays,
+          // The caller's context, not the dialog's: anything that opens after
+          // this dialog closes has to be pushed onto a context that is still
+          // mounted.
+          hostContext: context,
           onRenamed: onRenamed,
           onNotesRecap: onNotesRecap,
         ),
@@ -48,9 +52,19 @@ Future<void> showTaskDetails(
 class _TaskDetailsBody extends ConsumerStatefulWidget {
   final String taskId;
   final List<DateTime> weekDays;
+
+  /// A context from the widget that opened this dialog. Used for anything that
+  /// has to be shown *after* this dialog closes.
+  final BuildContext hostContext;
   final void Function()? onRenamed;
   final void Function()? onNotesRecap;
-  const _TaskDetailsBody({required this.taskId, required this.weekDays, this.onRenamed, this.onNotesRecap});
+  const _TaskDetailsBody({
+    required this.taskId,
+    required this.weekDays,
+    required this.hostContext,
+    this.onRenamed,
+    this.onNotesRecap,
+  });
   @override
   ConsumerState<_TaskDetailsBody> createState() => _TaskDetailsBodyState();
 }
@@ -167,11 +181,7 @@ class _TaskDetailsBodyState extends ConsumerState<_TaskDetailsBody> {
                 children: [
                   for (final d in assignedDays)
                     InkWell(
-                      onTap: () {
-                        // Straight into the full editor for that day.
-                        Navigator.pop(context);
-                        showDayDetail(context, d);
-                      },
+                      onTap: () => _closeThen(context, () => showDayDetail(widget.hostContext, d)),
                       borderRadius: BorderRadius.circular(8),
                       child: Container(
                         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
@@ -189,10 +199,7 @@ class _TaskDetailsBodyState extends ConsumerState<_TaskDetailsBody> {
             const SizedBox(height: 16),
             _sectionLabel(context, loc.setReminderItem),
             InkWell(
-              onTap: () {
-                Navigator.pop(context);
-                showReminderDialog(context, _task);
-              },
+              onTap: () => _closeThen(context, () => showReminderDialog(widget.hostContext, _task)),
               borderRadius: BorderRadius.circular(8),
               child: Container(
                 padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 9),
@@ -221,8 +228,12 @@ class _TaskDetailsBodyState extends ConsumerState<_TaskDetailsBody> {
           if (widget.onNotesRecap != null)
             TextButton.icon(
               onPressed: () {
-                widget.onNotesRecap!();
-                Navigator.pop(context);
+                final cb = widget.onNotesRecap!;
+                // Open it from the host context, and only after this dialog is
+                // gone: showDialog pushes a route, so a pop straight after the
+                // push would close the recap again and the button would do
+                // nothing at all.
+                _closeThen(context, cb);
               },
               icon: const Icon(Icons.notes_rounded, size: 15),
               label: Text(loc.notesRecap, style: const TextStyle(fontSize: 12.5)),
@@ -240,6 +251,21 @@ class _TaskDetailsBodyState extends ConsumerState<_TaskDetailsBody> {
         ]),
       ),
     ]);
+  }
+
+  /// Closes this dialog and only then runs [then].
+  ///
+  /// The order matters and getting it wrong is invisible: a callback that
+  /// opens its own dialog pushes a route on top, so popping straight afterwards
+  /// closed *that* one instead of this one and nothing appeared to happen. The
+  /// same trap applies to opening anything with this dialog's own `context`,
+  /// which is unmounted by the time the pop finishes.
+  Future<void> _closeThen(BuildContext dialogContext, void Function() then) async {
+    Navigator.pop(dialogContext);
+    // Wait for the dialog's exit animation. Pushing the next route on the same
+    // frame the old one leaves looks like nothing happened at all.
+    await Future<void>.delayed(const Duration(milliseconds: 220));
+    then();
   }
 
   Widget _sectionLabel(BuildContext context, String text) => Padding(
