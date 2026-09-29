@@ -3,13 +3,33 @@ import 'enums.dart';
 class StatusOption {
   final String id;
   final String label;
-  final String colorHex; // e.g. #FF0000
 
-  const StatusOption({required this.id, required this.label, required this.colorHex});
+  /// The colour the customer picked for this status, e.g. `#22C55E`.
+  ///
+  /// Empty means "not chosen yet". There is no built-in colour per status: a
+  /// customer who never opened the colour picker gets the neutral one from
+  /// [neutralColor] rather than a colour the app made up. Rows written before
+  /// this was optional are read as-is, so colours already picked are kept.
+  final String colorHex;
+
+  const StatusOption({required this.id, required this.label, this.colorHex = ''});
+
+  /// Shown for a status with no colour of its own, so the pill still reads as
+  /// a pill instead of borrowing another status's colour.
+  static const neutralColor = '#64748B';
+
+  bool get hasColor => colorHex.isNotEmpty;
+
+  /// What to actually paint: the customer's choice, or the neutral one.
+  String get effectiveColorHex => hasColor ? colorHex : neutralColor;
 
   Map<String, dynamic> toJson() => {'id': id, 'label': label, 'colorHex': colorHex};
-  factory StatusOption.fromJson(Map<String, dynamic> j) =>
-      StatusOption(id: j['id'] as String, label: j['label'] as String, colorHex: j['colorHex'] as String);
+  factory StatusOption.fromJson(Map<String, dynamic> j) => StatusOption(
+        id: j['id'] as String,
+        label: j['label'] as String,
+        // A missing key (or a null written by an older build) means unchosen.
+        colorHex: (j['colorHex'] as String?) ?? '',
+      );
 }
 
 class TagOption {
@@ -120,12 +140,16 @@ class ColumnDefinition {
           type: ColumnType.status,
           position: 0,
           config: {
+            // No colours: every status starts neutral and the customer picks
+            // its own in the column settings. `none` used to ship purple and
+            // `idle` gray, which is how a brand-new workspace ended up with
+            // colours nobody chose.
             'options': [
-              const StatusOption(id: 'idle', label: 'idle', colorHex: '#475569').toJson(),
-              const StatusOption(id: 'none', label: 'none', colorHex: '#7C3AED').toJson(),
-              const StatusOption(id: 'done', label: 'done', colorHex: '#22C55E').toJson(),
-              const StatusOption(id: 'cancel', label: 'cancel', colorHex: '#F43F5E').toJson(),
-              const StatusOption(id: 'in_progress', label: 'in progress', colorHex: '#F59E0B').toJson(),
+              const StatusOption(id: 'idle', label: 'idle').toJson(),
+              const StatusOption(id: 'none', label: 'none').toJson(),
+              const StatusOption(id: 'done', label: 'done').toJson(),
+              const StatusOption(id: 'cancel', label: 'cancel').toJson(),
+              const StatusOption(id: 'in_progress', label: 'in progress').toJson(),
             ]
           },
         ),

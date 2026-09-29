@@ -28,13 +28,44 @@ Color _hex(String hex) {
   return Color(int.parse(h, radix: 16));
 }
 
+/// The status id a cell should actually show, and its label and colour.
+///
+/// One resolution for all three, so they can never disagree. They used to be
+/// worked out separately - the label from `valueId ?? idle` but the colour
+/// from `valueId ?? none` - which is why an unassigned cell showed the word
+/// "idle" in the purple that belongs to "none".
+({String id, String label, Color color}) resolveStatus(String? valueId, List<StatusOption> options) {
+  final ids = options.map((o) => o.id).toSet();
+  // Unassigned reads as "idle" when the column has it, then "none", then
+  // whatever the first option is. An id that is no longer in the column falls
+  // back the same way instead of rendering a stale value.
+  final fallback = ids.contains('idle')
+      ? 'idle'
+      : ids.contains('none')
+          ? 'none'
+          : (options.isNotEmpty ? options.first.id : '');
+  final id = (valueId != null && ids.contains(valueId)) ? valueId : fallback;
+  String label = id;
+  for (final o in options) {
+    if (o.id == id) {
+      label = o.label;
+      break;
+    }
+  }
+  return (id: id, label: label, color: statusDotColor(id, options));
+}
+
 /// Status dot color for a value id, falling back to known pills.
+///
+/// There is no colour per status built into the app: a status the customer
+/// never coloured gets the neutral grey, so nothing shows a colour that
+/// belongs to a different status. The switch only covers ids that are no
+/// longer in the column at all (a value left over from a deleted option).
 Color statusDotColor(String? valueId, List<StatusOption> options) {
   final id = valueId ?? 'none';
-  try {
-    final opt = options.firstWhere((o) => o.id == id);
-    return _hex(opt.colorHex);
-  } catch (_) {}
+  for (final o in options) {
+    if (o.id == id) return _hex(o.effectiveColorHex);
+  }
   switch (id) {
     case 'done':
       return const Color(0xFF22C55E);
@@ -44,7 +75,7 @@ Color statusDotColor(String? valueId, List<StatusOption> options) {
     case 'in progress':
       return const Color(0xFFF59E0B);
     default:
-      return AppColors.textSecondary;
+      return _hex(StatusOption.neutralColor);
   }
 }
 
@@ -104,15 +135,9 @@ class CompactStatusIcon extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final valueId = rawValue as String?;
-    final dot = statusDotColor(valueId, col.statusOptions);
-    final fallbackId = col.statusOptions.any((o) => o.id == 'idle') ? 'idle' : 'none';
-    final label = (() {
-      try {
-        return col.statusOptions.firstWhere((o) => o.id == (valueId ?? fallbackId)).label;
-      } catch (_) {
-        return valueId ?? fallbackId;
-      }
-    })();
+    final st = resolveStatus(valueId, col.statusOptions);
+    final dot = st.color;
+    final label = st.label;
     return Tooltip(
       message: label,
       child: InkWell(
@@ -155,15 +180,9 @@ class SoftStatusPill extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final valueId = rawValue as String?;
-    final dot = statusDotColor(valueId, col.statusOptions);
-    final fallbackId = col.statusOptions.any((o) => o.id == 'idle') ? 'idle' : 'none';
-    final label = (() {
-      try {
-        return col.statusOptions.firstWhere((o) => o.id == (valueId ?? fallbackId)).label;
-      } catch (_) {
-        return valueId ?? fallbackId;
-      }
-    })();
+    final st = resolveStatus(valueId, col.statusOptions);
+    final dot = st.color;
+    final label = st.label;
     return Tooltip(
       message: title,
       child: InkWell(
@@ -201,8 +220,9 @@ class StatusDotButton extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final t = AppLocalizations.of(context)!;
     final valueId = rawValue as String?;
-    final dot = statusDotColor(valueId, col.statusOptions);
-    final assigned = valueId != null && valueId != 'idle';
+    final st = resolveStatus(valueId, col.statusOptions);
+    final dot = st.color;
+    final assigned = st.id != 'idle' && st.id != 'none';
     return InkWell(
       borderRadius: BorderRadius.circular(8),
       onTap: () => showCellEditorDialog(

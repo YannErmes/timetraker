@@ -51,7 +51,7 @@ class _StatusCellState extends State<StatusCell> {
   /// always possible, even for columns created before idle existed.
   List<StatusOption> get _effectiveOptions {
     if (widget.options.any((o) => o.id == 'idle')) return widget.options;
-    return [const StatusOption(id: 'idle', label: 'idle', colorHex: '#475569'), ...widget.options];
+    return [const StatusOption(id: 'idle', label: 'idle'), ...widget.options];
   }
 
   @override
@@ -73,7 +73,7 @@ class _StatusCellState extends State<StatusCell> {
       try {
         final opt = widget.options.firstWhere((o) => o.id == effectiveId);
         // use custom hex as border, derive muted fill
-        border = _hex(opt.colorHex);
+        border = _hex(opt.effectiveColorHex);
         fill = border.withValues(alpha: 0.18);
         text = Colors.white;
       } catch (_) {}
@@ -201,6 +201,7 @@ class TagCell extends StatelessWidget {
             try {
               o = options.firstWhere((e) => e.id == id);
             } catch (_) {}
+            // TagOption, not StatusOption: tags keep their own required colour.
             final bg = o != null ? _hex(o.colorHex).withValues(alpha: 0.18) : AppColors.inputFill;
             final border = o != null ? _hex(o.colorHex) : AppColors.border;
             return Container(
@@ -262,8 +263,8 @@ class _TagPickerState extends State<_TagPicker> {
                   label: Text(o.label, style: const TextStyle(fontSize: 12)),
                   selected: sel.contains(o.id),
                   backgroundColor: AppColors.inputFill,
-                  selectedColor: _hex(o.colorHex).withValues(alpha: 0.25),
-                  side: BorderSide(color: sel.contains(o.id) ? _hex(o.colorHex) : AppColors.border),
+      selectedColor: _hex(o.colorHex).withValues(alpha: 0.25),
+      side: BorderSide(color: sel.contains(o.id) ? _hex(o.colorHex) : AppColors.border),
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                   onSelected: (v) => setState(() => v ? sel.add(o.id) : sel.remove(o.id)),
                 ))

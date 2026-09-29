@@ -32,7 +32,7 @@ import 'reminder_dialog.dart';
 ///
 /// A getter, not a constant: AppColors.border depends on the active theme and
 /// the theme is switched at runtime.
-Color get _dayDividerColor => AppColors.border.withValues(alpha: 0.5);
+Color get _dayDividerColor => AppColors.border.withValues(alpha: 0.9);
 
 BoxDecoration? _dayDivider(int di) => di == 0
     ? null

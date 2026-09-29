@@ -71,7 +71,7 @@ class ColumnSettingsPanel extends ConsumerWidget {
                         if (c.type == ColumnType.status)
                           Padding(
                             padding: const EdgeInsets.only(top: 4),
-                            child: Wrap(spacing: 4, runSpacing: 2, children: c.statusOptions.map((o) => Container(padding: EdgeInsets.symmetric(horizontal: 6, vertical: 2), decoration: BoxDecoration(color: _hex(o.colorHex).withValues(alpha: 0.18), borderRadius: BorderRadius.circular(8), border: Border.all(color: _hex(o.colorHex).withValues(alpha: 0.5))), child: Text(o.label, style: TextStyle(fontSize: 10, color: AppColors.textPrimary)))).toList()),
+                            child: Wrap(spacing: 4, runSpacing: 2, children: c.statusOptions.map((o) => Container(padding: EdgeInsets.symmetric(horizontal: 6, vertical: 2), decoration: BoxDecoration(color: _hex(o.effectiveColorHex).withValues(alpha: 0.18), borderRadius: BorderRadius.circular(8), border: Border.all(color: _hex(o.effectiveColorHex).withValues(alpha: 0.5))), child: Text(o.label, style: TextStyle(fontSize: 10, color: AppColors.textPrimary)))).toList()),
                           ),
                       ]),
                       trailing: Row(mainAxisSize: MainAxisSize.min, children: [
@@ -137,13 +137,15 @@ class _ColumnEditDialogState extends ConsumerState<_ColumnEditDialog> {
     super.initState();
     _label = TextEditingController(text: widget.existing?.label ?? '');
     _type = widget.existing?.type ?? ColumnType.text;
+    // A new status column starts with no colours: each one is picked by the
+    // customer in the colour swatch next to it.
     _statusOpts = widget.existing?.statusOptions ??
         [
-          const StatusOption(id: 'idle', label: 'idle', colorHex: '#475569'),
-          const StatusOption(id: 'none', label: 'none', colorHex: '#7C3AED'),
-          const StatusOption(id: 'done', label: 'done', colorHex: '#22C55E'),
-          const StatusOption(id: 'cancel', label: 'cancel', colorHex: '#F43F5E'),
-          const StatusOption(id: 'in_progress', label: 'in progress', colorHex: '#F59E0B'),
+          const StatusOption(id: 'idle', label: 'idle'),
+          const StatusOption(id: 'none', label: 'none'),
+          const StatusOption(id: 'done', label: 'done'),
+          const StatusOption(id: 'cancel', label: 'cancel'),
+          const StatusOption(id: 'in_progress', label: 'in progress'),
         ];
     _unit = widget.existing?.unit ?? 'h';
     _anchorId = null; // default append at end
@@ -275,22 +277,52 @@ class _ColumnEditDialogState extends ConsumerState<_ColumnEditDialog> {
                       ),
                     ),
                     const SizedBox(width: 8),
-                    GestureDetector(
-                      onTap: () async {
-                        final c = await showDialog<Color>(context: context, builder: (_) => _ColorPicker(initial: _hex(_statusOpts[i].colorHex)));
-                        if (c != null) {
-                          final l = List<StatusOption>.from(_statusOpts);
-                          l[i] = StatusOption(id: l[i].id, label: l[i].label, colorHex: _toHex(c));
-                          setState(() => _statusOpts = l);
-                        }
-                      },
-                      child: Container(width: 32, height: 32, decoration: BoxDecoration(color: _hex(_statusOpts[i].colorHex), shape: BoxShape.circle, border: Border.all(color: AppColors.border))),
-                    ),
+                    // The swatch is how the colour is chosen, and the small
+                    // cross how it is cleared back to "no colour".
+                    Column(mainAxisSize: MainAxisSize.min, children: [
+                      GestureDetector(
+                        onTap: () async {
+                          final c = await showDialog<Color>(context: context, builder: (_) => _ColorPicker(initial: _hex(_statusOpts[i].effectiveColorHex)));
+                          if (c != null) {
+                            final l = List<StatusOption>.from(_statusOpts);
+                            l[i] = StatusOption(id: l[i].id, label: l[i].label, colorHex: _toHex(c));
+                            setState(() => _statusOpts = l);
+                          }
+                        },
+                        child: Container(
+                          width: 32,
+                          height: 32,
+                          decoration: BoxDecoration(
+                            // An unchosen colour reads as an empty ring, not as
+                            // a colour the app decided on.
+                            color: _statusOpts[i].hasColor ? _hex(_statusOpts[i].colorHex) : Colors.transparent,
+                            shape: BoxShape.circle,
+                            border: Border.all(
+                              color: _statusOpts[i].hasColor ? AppColors.border : AppColors.textSecondary,
+                              width: _statusOpts[i].hasColor ? 1 : 1.5,
+                              style: _statusOpts[i].hasColor ? BorderStyle.solid : BorderStyle.solid,
+                            ),
+                          ),
+                        ),
+                      ),
+                      if (_statusOpts[i].hasColor)
+                        GestureDetector(
+                          onTap: () {
+                            final l = List<StatusOption>.from(_statusOpts);
+                            l[i] = StatusOption(id: l[i].id, label: l[i].label);
+                            setState(() => _statusOpts = l);
+                          },
+                          child: Padding(
+                            padding: const EdgeInsets.only(top: 1),
+                            child: Icon(Icons.close_rounded, size: 12, color: AppColors.textSecondary),
+                          ),
+                        ),
+                    ]),
                     IconButton(icon: Icon(Icons.delete, size: 18, color: AppColors.textSecondary), onPressed: () => setState(() => _statusOpts.removeAt(i))),
                   ]),
                 ),
               ),
-            TextButton.icon(onPressed: () => setState(() => _statusOpts.add(StatusOption(id: _uuid.v4(), label: 'new', colorHex: '#475569'))), icon: const Icon(Icons.add, size: 16), label: Text(t.addOptionLbl))
+                    TextButton.icon(onPressed: () => setState(() => _statusOpts.add(StatusOption(id: _uuid.v4(), label: 'new'))), icon: const Icon(Icons.add, size: 16), label: Text(t.addOptionLbl))
           ]
         ]),
       ),
