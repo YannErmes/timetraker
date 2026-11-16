@@ -2218,6 +2218,126 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Your data stays under the current name. You can reclaim it later by entering the exact same name again.'**
   String get changeNameQBody;
+
+  /// No description provided for @jsonOpen.
+  ///
+  /// In en, this message translates to:
+  /// **'Edit tasks as JSON'**
+  String get jsonOpen;
+
+  /// No description provided for @jsonPanelTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Tasks as JSON'**
+  String get jsonPanelTitle;
+
+  /// No description provided for @jsonPanelHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Valid JSON updates the table as you type. Remove a row to delete a task; leave out \"id\" to add one. \"days\" takes YYYY-MM-DD dates.'**
+  String get jsonPanelHint;
+
+  /// No description provided for @jsonLive.
+  ///
+  /// In en, this message translates to:
+  /// **'Live · {count} tasks'**
+  String jsonLive(String count);
+
+  /// No description provided for @jsonTyping.
+  ///
+  /// In en, this message translates to:
+  /// **'Applying as you type…'**
+  String get jsonTyping;
+
+  /// No description provided for @jsonExternal.
+  ///
+  /// In en, this message translates to:
+  /// **'Table changed — Reload to see it'**
+  String get jsonExternal;
+
+  /// No description provided for @jsonCopy.
+  ///
+  /// In en, this message translates to:
+  /// **'Copy JSON'**
+  String get jsonCopy;
+
+  /// No description provided for @jsonUndo.
+  ///
+  /// In en, this message translates to:
+  /// **'Undo last change'**
+  String get jsonUndo;
+
+  /// No description provided for @jsonReload.
+  ///
+  /// In en, this message translates to:
+  /// **'Reload from table'**
+  String get jsonReload;
+
+  /// No description provided for @jsonClose.
+  ///
+  /// In en, this message translates to:
+  /// **'Close panel'**
+  String get jsonClose;
+
+  /// No description provided for @jsonImport.
+  ///
+  /// In en, this message translates to:
+  /// **'Import JSON file'**
+  String get jsonImport;
+
+  /// No description provided for @jsonImportTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Import tasks from a file'**
+  String get jsonImportTitle;
+
+  /// No description provided for @jsonImportBody.
+  ///
+  /// In en, this message translates to:
+  /// **'The file has {n} tasks. Your table has {m}.'**
+  String jsonImportBody(String n, String m);
+
+  /// No description provided for @jsonImportReplace.
+  ///
+  /// In en, this message translates to:
+  /// **'Replace everything'**
+  String get jsonImportReplace;
+
+  /// No description provided for @jsonImportReplaceHelp.
+  ///
+  /// In en, this message translates to:
+  /// **'The file becomes the whole task list. Tasks not in it are deleted.'**
+  String get jsonImportReplaceHelp;
+
+  /// No description provided for @jsonImportMerge.
+  ///
+  /// In en, this message translates to:
+  /// **'Merge — add new tasks'**
+  String get jsonImportMerge;
+
+  /// No description provided for @jsonImportMergeHelp.
+  ///
+  /// In en, this message translates to:
+  /// **'Adds the file\'s tasks to your list. Tasks whose id you already have are skipped.'**
+  String get jsonImportMergeHelp;
+
+  /// No description provided for @jsonImportError.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not read that file: {error}'**
+  String jsonImportError(String error);
+
+  /// No description provided for @jsonImportReplaced.
+  ///
+  /// In en, this message translates to:
+  /// **'Imported {n} tasks — replaced the list'**
+  String jsonImportReplaced(String n);
+
+  /// No description provided for @jsonImportMerged.
+  ///
+  /// In en, this message translates to:
+  /// **'Added {n} tasks · {skipped} duplicates skipped'**
+  String jsonImportMerged(String n, String skipped);
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

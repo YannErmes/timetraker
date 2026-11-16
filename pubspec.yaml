@@ -1,7 +1,7 @@
 name: tracker_sheet
 description: Spreadsheet-style task tracker - Flutter Web + Android + Supabase.
 publish_to: 'none'
-version: 1.6.1+11
+version: 1.7.0+12
 
 environment:
   sdk: ^3.13.3
@@ -30,6 +30,7 @@ dependencies:
   url_launcher: ^6.3.2
   http: ^1.6.0
   googleapis_auth: ^2.3.4
+  file_picker: ^13.4.0
 dev_dependencies:
   flutter_test:
     sdk: flutter

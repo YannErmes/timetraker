@@ -1165,4 +1165,74 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get changeNameQBody => 'Vos données restent sous le nom actuel. Vous pourrez les récupérer plus tard en saisissant exactement le même nom.';
+
+  @override
+  String get jsonOpen => 'Modifier les tâches en JSON';
+
+  @override
+  String get jsonPanelTitle => 'Tâches en JSON';
+
+  @override
+  String get jsonPanelHint => 'Un JSON valide met le tableau à jour pendant la saisie. Supprimez une ligne pour supprimer une tâche ; omettez \"id\" pour en créer une. \"days\" attend des dates YYYY-MM-DD.';
+
+  @override
+  String jsonLive(String count) {
+    return 'En direct · $count tâches';
+  }
+
+  @override
+  String get jsonTyping => 'Application en cours…';
+
+  @override
+  String get jsonExternal => 'Tableau modifié — Rechargez pour le voir';
+
+  @override
+  String get jsonCopy => 'Copier le JSON';
+
+  @override
+  String get jsonUndo => 'Annuler la dernière modification';
+
+  @override
+  String get jsonReload => 'Recharger depuis le tableau';
+
+  @override
+  String get jsonClose => 'Fermer le panneau';
+
+  @override
+  String get jsonImport => 'Importer un fichier JSON';
+
+  @override
+  String get jsonImportTitle => 'Importer des tâches depuis un fichier';
+
+  @override
+  String jsonImportBody(String n, String m) {
+    return 'Le fichier contient $n tâches. Votre tableau en contient $m.';
+  }
+
+  @override
+  String get jsonImportReplace => 'Tout remplacer';
+
+  @override
+  String get jsonImportReplaceHelp => 'Le fichier devient la liste complète. Les tâches absentes du fichier sont supprimées.';
+
+  @override
+  String get jsonImportMerge => 'Fusionner — ajouter des tâches';
+
+  @override
+  String get jsonImportMergeHelp => 'Ajoute les tâches du fichier à votre liste. Celles dont l\'id existe déjà sont ignorées.';
+
+  @override
+  String jsonImportError(String error) {
+    return 'Impossible de lire ce fichier : $error';
+  }
+
+  @override
+  String jsonImportReplaced(String n) {
+    return '$n tâches importées — liste remplacée';
+  }
+
+  @override
+  String jsonImportMerged(String n, String skipped) {
+    return '$n tâches ajoutées · $skipped doublons ignorés';
+  }
 }

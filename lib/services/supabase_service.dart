@@ -497,7 +497,13 @@ class SupabaseService {
 
   Future<void> addTask(String name) async {
     if (userId == null) return;
-    final t = Task(id: _uuid.v4(), name: name, position: _tasks.length, createdAt: DateTime.now(), userId: userId!);
+    await _insertTask(Task(id: _uuid.v4(), name: name, position: _tasks.length, createdAt: DateTime.now(), userId: userId!));
+  }
+
+  /// Insert an already-built task. Shared by [addTask] and the JSON editor,
+  /// which supplies the id itself so the same JSON row keeps its identity
+  /// across edits (the coloured tag dots and day cells hang off that id).
+  Future<void> _insertTask(Task t) async {
     _tasks = [..._tasks, t];
     _tasksCtrl.add(_tasks);
     await _persistCache();
@@ -586,6 +592,70 @@ class SupabaseService {
       await _cache.enqueue(PendingMutation(id: _uuid.v4(), table: 'tasks', op: 'delete', payload: {'id': id, 'user_id': uid}, createdAt: DateTime.now()));
     }
     refreshTaskReminders();
+  }
+
+  /// Make the task list match [tasks] exactly, writing only the difference.
+  ///
+  /// Backs the JSON side panel. One edit to a name should not rewrite every
+  /// row, and an id missing from the JSON means "delete this task". [days] is
+  /// keyed by task id on purpose: a task with no entry there keeps the days it
+  /// already had, so editing a name never silently wipes a schedule.
+  /// Returns the number of rows/cells actually written.
+  Future<int> applyTaskSnapshot(List<Task> tasks, {Map<String, List<DateTime>>? days}) async {
+    final current = {for (final t in _tasks) t.id: t};
+    final wanted = <String>{};
+    for (final t in tasks) wanted.add(t.id);
+    var changes = 0;
+
+    // Deletions first, so rows removed from the JSON are gone before the
+    // survivors are considered for updates.
+    for (final id in current.keys.toList()) {
+      if (!wanted.contains(id)) {
+        await deleteTask(id);
+        changes++;
+      }
+    }
+    for (final t in tasks) {
+      final old = current[t.id];
+      if (old == null) {
+        await _insertTask(t);
+        changes++;
+      } else if (old.name != t.name ||
+          old.position != t.position ||
+          old.reminder != t.reminder ||
+          _stringListsDiffer(old.tags, t.tags)) {
+        await updateTask(t);
+        changes++;
+      }
+    }
+    if (days != null) {
+      for (final entry in days.entries) {
+        final wantedDays = entry.value.map(DayEntry.dateToKey).toSet();
+        final existing = _entries.where((e) => e.taskId == entry.key).toList();
+        for (final e in existing) {
+          if (!wantedDays.contains(e.dateKey)) {
+            await toggleChecked(entry.key, e.date, false);
+            changes++;
+          }
+        }
+        final have = existing.map((e) => e.dateKey).toSet();
+        for (final d in entry.value) {
+          if (!have.contains(DayEntry.dateToKey(d))) {
+            await toggleChecked(entry.key, d, true);
+            changes++;
+          }
+        }
+      }
+    }
+    return changes;
+  }
+
+  static bool _stringListsDiffer(List<String> a, List<String> b) {
+    if (a.length != b.length) return true;
+    for (var i = 0; i < a.length; i++) {
+      if (a[i] != b[i]) return true;
+    }
+    return false;
   }
 
   // Columns CRUD — instant

@@ -53,3 +53,7 @@ class NoteEditorRequest {
 
 /// When non-null, HomeScreen swaps the end drawer to the note editor.
 final noteEditorRequestProvider = StateProvider<NoteEditorRequest?>((ref) => null);
+
+/// Opens the live JSON task editor. On desktop it sits beside the table so
+/// both are visible at once; on a phone it opens as a sheet.
+final jsonPanelOpenProvider = StateProvider<bool>((ref) => false);

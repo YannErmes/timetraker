@@ -15,6 +15,7 @@ import '../widgets/analytics_panel.dart';
 import '../widgets/suggestion_dialog.dart';
 import '../widgets/view_settings.dart';
 import '../widgets/filter_sidebar.dart';
+import '../widgets/json_task_panel.dart';
 
 class HomeScreen extends ConsumerStatefulWidget {
   const HomeScreen({super.key});
@@ -64,6 +65,26 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     final identity = ref.watch(identityServiceProvider);
     final isMobile = MediaQuery.of(context).size.width < 700;
     final t = AppLocalizations.of(context)!;
+    // On a phone there is no room beside the table, so the same live editor
+    // opens as a sheet instead. Desktop keeps it as a side panel (below).
+    ref.listen<bool>(jsonPanelOpenProvider, (_, open) {
+      if (open && isMobile && mounted) {
+        showModalBottomSheet(
+          context: context,
+          isScrollControlled: true,
+          backgroundColor: Colors.transparent,
+          builder: (_) => const SizedBox(
+            height: 620,
+            child: ClipRRect(
+              borderRadius: BorderRadius.vertical(top: Radius.circular(12)),
+              child: JsonTaskPanel(inSheet: true),
+            ),
+          ),
+        ).whenComplete(() {
+          if (ref.read(jsonPanelOpenProvider)) ref.read(jsonPanelOpenProvider.notifier).state = false;
+        });
+      }
+    });
     final now = DateTime.now();
     final todayStr = '${now.month}/${now.day}/${now.year}';
     return Scaffold(
@@ -119,6 +140,12 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
               onPressed: () => ref.read(displayPrefsProvider.notifier).setTheme(next),
             );
           }),
+          IconButton(
+            icon: const Icon(Icons.data_object),
+            tooltip: t.jsonOpen,
+            color: ref.watch(jsonPanelOpenProvider) ? AppColors.accent : AppColors.textSecondary,
+            onPressed: () => ref.read(jsonPanelOpenProvider.notifier).state = !ref.read(jsonPanelOpenProvider),
+          ),
           _SyncStatusButton(svc: svc, email: identity.name),
           if (!isMobile) ...[
             SegmentedButton<ViewMode>(
@@ -278,6 +305,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       body: Column(children: [
         _SyncBanner(svc: svc),
         Expanded(
+          child: Row(children: [
+          Expanded(
           // iOS-smooth crossfade/scale whenever the view changes.
           child: AnimatedSwitcher(
             duration: const Duration(milliseconds: 350),
@@ -320,6 +349,11 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
               ),
             ),
           ),
+          // Fixed-width, not Expanded: the table keeps all the room it can
+          // get and the panel slides in from the right without a scrim.
+          if (!isMobile && ref.watch(jsonPanelOpenProvider)) const SizedBox(width: 440, child: JsonTaskPanel()),
+        ]),
+      ),
         ],
       ),
       floatingActionButton: isMobile && view != ViewMode.analytics

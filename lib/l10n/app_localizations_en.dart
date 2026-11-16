@@ -1165,4 +1165,74 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get changeNameQBody => 'Your data stays under the current name. You can reclaim it later by entering the exact same name again.';
+
+  @override
+  String get jsonOpen => 'Edit tasks as JSON';
+
+  @override
+  String get jsonPanelTitle => 'Tasks as JSON';
+
+  @override
+  String get jsonPanelHint => 'Valid JSON updates the table as you type. Remove a row to delete a task; leave out \"id\" to add one. \"days\" takes YYYY-MM-DD dates.';
+
+  @override
+  String jsonLive(String count) {
+    return 'Live · $count tasks';
+  }
+
+  @override
+  String get jsonTyping => 'Applying as you type…';
+
+  @override
+  String get jsonExternal => 'Table changed — Reload to see it';
+
+  @override
+  String get jsonCopy => 'Copy JSON';
+
+  @override
+  String get jsonUndo => 'Undo last change';
+
+  @override
+  String get jsonReload => 'Reload from table';
+
+  @override
+  String get jsonClose => 'Close panel';
+
+  @override
+  String get jsonImport => 'Import JSON file';
+
+  @override
+  String get jsonImportTitle => 'Import tasks from a file';
+
+  @override
+  String jsonImportBody(String n, String m) {
+    return 'The file has $n tasks. Your table has $m.';
+  }
+
+  @override
+  String get jsonImportReplace => 'Replace everything';
+
+  @override
+  String get jsonImportReplaceHelp => 'The file becomes the whole task list. Tasks not in it are deleted.';
+
+  @override
+  String get jsonImportMerge => 'Merge — add new tasks';
+
+  @override
+  String get jsonImportMergeHelp => 'Adds the file\'s tasks to your list. Tasks whose id you already have are skipped.';
+
+  @override
+  String jsonImportError(String error) {
+    return 'Could not read that file: $error';
+  }
+
+  @override
+  String jsonImportReplaced(String n) {
+    return 'Imported $n tasks — replaced the list';
+  }
+
+  @override
+  String jsonImportMerged(String n, String skipped) {
+    return 'Added $n tasks · $skipped duplicates skipped';
+  }
 }
